@@ -33,21 +33,44 @@ function makeNoise(seed) {
 // thin bright lines along noise "valleys" (cracks, veins)
 const ridge = (n, width) => Math.max(0, 1 - Math.abs(n - 0.5) / width);
 
+// Tileable cellular (Worley) noise: `cells` random points per side, wrapped at the texture edge.
+// Returns { f1, f2 }: distances (in cell units) to the nearest and second-nearest point.
+// f2 - f1 is small along the borders between cells, which makes cracked plates.
+function makeCells(seed, cells) {
+  const pts = [];
+  let s = seed >>> 0;
+  const rnd = () => { s = Math.imul(s ^ (s >>> 15), 2246822507) + 0x9e3779b9 >>> 0; return s / 4294967296; };
+  for (let i = 0; i < cells * cells; i++) pts.push([rnd(), rnd()]);
+  return (u, v) => {
+    const x = u * cells, y = v * cells, cx = Math.floor(x), cy = Math.floor(y);
+    let f1 = 9, f2 = 9;
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const gx = cx + dx, gy = cy + dy;
+        const p = pts[(((gy % cells) + cells) % cells) * cells + (((gx % cells) + cells) % cells)];
+        const d = Math.hypot(gx + p[0] - x, gy + p[1] - y);
+        if (d < f1) { f2 = f1; f1 = d; } else if (d < f2) f2 = d;
+      }
+    }
+    return { f1, f2 };
+  };
+}
+
 const clamp01 = v => Math.min(1, Math.max(0, v));
 const mix = (a, b, t) => a.map((x, i) => x + (b[i] - x) * t);
 
 // Paints a texture by calling fn(u, v) -> { c: [r,g,b] 0..255, h: 0..1, e?: [r,g,b] }.
-function paint(fn) {
-  const make = () => { const c = document.createElement('canvas'); c.width = c.height = SIZE; return c; };
+function paint(fn, size = SIZE) {
+  const make = () => { const c = document.createElement('canvas'); c.width = c.height = size; return c; };
   const color = make(), bump = make(), glow = make();
-  const cd = color.getContext('2d').createImageData(SIZE, SIZE);
-  const bd = bump.getContext('2d').createImageData(SIZE, SIZE);
-  const gd = glow.getContext('2d').createImageData(SIZE, SIZE);
+  const cd = color.getContext('2d').createImageData(size, size);
+  const bd = bump.getContext('2d').createImageData(size, size);
+  const gd = glow.getContext('2d').createImageData(size, size);
   let hasGlow = false;
-  for (let y = 0; y < SIZE; y++) {
-    for (let x = 0; x < SIZE; x++) {
-      const { c, h, e } = fn(x / SIZE, y / SIZE);
-      const i = (y * SIZE + x) * 4;
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const { c, h, e } = fn(x / size, y / size);
+      const i = (y * size + x) * 4;
       cd.data.set([c[0], c[1], c[2], 255], i);
       const hv = clamp01(h) * 255;
       bd.data.set([hv, hv, hv, 255], i);
@@ -90,6 +113,8 @@ function normalFromHeight(canvas, strength = 2) {
 
 // ---------- the terrains ----------
 const n1 = makeNoise(11), n2 = makeNoise(23), n3 = makeNoise(37), n4 = makeNoise(51);
+const lavaCells = makeCells(71, 6);
+const SIZES = { lava: 512 }; // texture size per terrain where 256 isn't enough detail
 
 const PAINTERS = {
   grass: (u, v) => {
@@ -138,12 +163,30 @@ const PAINTERS = {
     if (bubbles > 0.84) c = mix(c, [200, 236, 252], 0.6);
     return { c, h: 0.5 + cracks * 0.4 + fine * 0.2 };
   },
+  // lava: cooled crust broken into plates, molten seams glowing between them (white-gold core fading to
+  // deep red at the edge), a few open pools, hairline cracks and embers on the plates
   lava: (u, v) => {
-    const crust = n1(u, v, 4, 5), veins = ridge(n2(u, v, 4, 4), 0.06), pools = n3(u, v, 3, 3);
-    const hot = clamp01(veins + clamp01((pools - 0.68) * 4));
-    const c = mix(mix([34, 26, 24], [70, 50, 40], crust), [255, 120, 30], hot);
-    const e = mix([0, 0, 0], [255, 150, 40], hot).map(x => x * (0.6 + 0.4 * crust));
-    return { c, h: crust * (1 - hot), e };
+    // warp the plate pattern so the seams wander instead of running straight
+    const wu = u + (n4(u, v, 3, 3) - 0.5) * 0.08, wv = v + (n4(v, u, 3, 3) - 0.5) * 0.08;
+    const { f1, f2 } = lavaCells(wu, wv);
+    const seam = f2 - f1;                                             // 0 on a seam between plates
+    const crust = n1(u, v, 4, 5), grain = n2(u, v, 64, 2), pools = n3(u, v, 3, 3);
+    const hair = ridge(n4(u, v, 12, 3), 0.02) * clamp01(f1 * 1.6);    // fine cracks, away from the seams
+    const core = clamp01(1 - seam / 0.05), rim = clamp01(1 - seam / 0.22) ** 1.5; // white-hot middle, glowing edge
+    const pool = clamp01((pools - 0.7) * 5);
+    const heat = Math.max(core, pool);
+    const ember = grain > 0.78 && crust > 0.5 ? (grain - 0.78) * 4 : 0;
+    // plates: dark basalt, domed toward their middles, rough grain, a dull red where they meet the heat
+    const ash = clamp01((n3(u + 0.5, v, 8, 3) - 0.55) * 3);         // pale ash patches on the cooler plates
+    let c = mix([26, 20, 18], [84, 62, 50], crust * 0.5 + clamp01(f1) * 0.25 + grain * 0.25);
+    c = mix(c, [96, 88, 84], ash * clamp01(f1 * 1.5) * 0.45);
+    c = mix(c, [120, 30, 12], rim * 0.75);
+    c = mix(c, [255, 120, 30], Math.max(heat, hair * 0.7, ember * 0.6));
+    c = mix(c, [255, 214, 120], core * core * 0.8 + pool * 0.3);       // hottest middle runs toward yellow
+    const glow = Math.max(heat, rim * 0.35, hair * 0.6, ember * 0.5);
+    const e = mix([0, 0, 0], mix([200, 50, 12], [255, 170, 60], heat), glow).map(x => x * (0.65 + 0.35 * crust));
+    const h = (clamp01(f1 * 1.3) * 0.55 + crust * 0.3 + grain * 0.15) * (1 - Math.max(rim * 0.7, pool));
+    return { c, h, e };
   },
   water: (u, v) => {
     const base = n1(u, v, 3, 4), waves = n2(u, v, 8, 3);
@@ -173,7 +216,7 @@ let cache = null;
 export function terrainTextures() {
   if (cache) return cache;
   cache = {};
-  for (const [k, fn] of Object.entries(PAINTERS)) cache[k] = paint(fn);
+  for (const [k, fn] of Object.entries(PAINTERS)) cache[k] = paint(fn, SIZES[k]);
   cache.water.normal = normalFromHeight(cache.water.bumpCanvas, 3);
   return cache;
 }
