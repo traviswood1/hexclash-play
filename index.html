@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Hex Clash</title>
+<link rel="stylesheet" href="styles.css">
+<script type="importmap">
+{ "imports": {
+    "three": "./vendor/three/build/three.module.js",
+    "three/addons/": "./vendor/three/examples/jsm/"
+} }
+</script>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#07090f">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<script>if ('serviceWorker' in navigator) addEventListener('load', () => navigator.serviceWorker.register('sw.js'));</script>
+</head>
+<body>
+<div id="stage"></div>
+<div id="hud">
+  <div id="vignette"></div>
+  <header id="topbar">
+    <div class="brand">Hex Clash</div>
+    <div id="phase"></div>
+    <div class="top-actions">
+      <button id="btnSettings" title="Backdrop, dice animation">Settings</button>
+      <button id="btnCamera" title="Reset camera">Camera</button>
+      <button id="btnHelp" title="How to play">Rules</button>
+      <button id="btnNew" title="Back to map setup">New game</button>
+    </div>
+  </header>
+  <div id="plates" class="hidden"></div>
+  <aside id="setup" class="panel"></aside>
+  <aside id="side" class="panel"></aside>
+  <section id="unitCard" class="panel"></section>
+  <div id="hexInfo"></div>
+  <div id="banner"></div>
+  <div id="toast"></div>
+  <div id="floaters"></div>
+  <div id="tip" class="panel hidden"></div>
+  <div id="dice" class="panel" title="Click to skip"></div>
+  <div id="modal" class="hidden"></div>
+</div>
+<div id="loading">Raising the battlefield…</div>
+<script type="module" src="src/main.js"></script>
+</body>
+</html>

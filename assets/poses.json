@@ -1,0 +1,206 @@
+{
+  "soldier": {
+    "clip": "Left_Slash",
+    "at": 0.44
+  },
+  "archer": {
+    "clip": "Archery_Shot",
+    "at": 0.66
+  },
+  "fire_mage": {
+    "clip": "Charged_Spell_Cast_1",
+    "at": 0.09
+  },
+  "ice_mage": {
+    "clip": "mage_soell_cast_1",
+    "at": 0.93
+  },
+  "assassin": {
+    "clip": "Double_Blade_Spin",
+    "at": 0.08
+  },
+  "golem": {
+    "clip": "Charged_Ground_Slam",
+    "at": 0.3
+  },
+  "war_beast": {
+    "clip": "Idle_9",
+    "at": 0.3
+  },
+  "sorceress": {
+    "clip": "Charged_Spell_Cast_1",
+    "at": 0.09
+  },
+  "warlord": {
+    "clip": "Talk_Passionately",
+    "at": 0.42
+  },
+  "cleric": {
+    "clip": "mage_soell_cast",
+    "at": 0.26
+  },
+  "berserker": {
+    "clip": "Heavy_Hammer_Swing",
+    "at": 0.15
+  },
+  "paladin": {
+    "clip": "Left_Slash",
+    "at": 0.55
+  },
+  "necromancer": {
+    "clip": "Charged_Spell_Cast",
+    "at": 0.12
+  },
+  "druid": {
+    "clip": "mage_soell_cast",
+    "at": 0.59
+  },
+  "dwarf": {
+    "clip": "Left_Slash",
+    "at": 0.18
+  },
+  "monk": {
+    "clip": "Kung_Fu_Punch",
+    "at": 0.35
+  },
+  "valkyrie": {
+    "clip": "Thrust_Slash",
+    "at": 0.31
+  },
+  "shaman": {
+    "clip": "mage_soell_cast_3",
+    "at": 0.07
+  },
+  "troll": {
+    "clip": "Right_Hand_Sword_Slash",
+    "at": 0.09
+  },
+  "starcaller": {
+    "clip": "Charged_Spell_Cast",
+    "at": 0.65
+  },
+  "runeblade": {
+    "clip": "Right_Hand_Sword_Slash",
+    "at": 0.2
+  },
+  "oni_warbreaker": {
+    "clip": "Heavy_Hammer_Swing",
+    "at": 0.77
+  },
+  "pikeman": {
+    "clip": "Thrust_Slash",
+    "at": 0.06
+  },
+  "gale_dancer": {
+    "clip": "Charged_Upward_Slash",
+    "at": 0.33
+  },
+  "neon_ronin": {
+    "clip": "Charged_Slash",
+    "at": 0.25
+  },
+  "mallet_mite": {
+    "clip": "Heavy_Hammer_Swing",
+    "at": 0.6
+  },
+  "lantern_kitsune": {
+    "clip": "mage_soell_cast_3",
+    "at": 0.11
+  },
+  "tengu_windblade": {
+    "clip": "Charged_Upward_Slash",
+    "at": 0.33
+  },
+  "snow_wraith": {
+    "clip": "Charged_Spell_Cast",
+    "at": 0.38
+  },
+  "thunder_drummer": {
+    "clip": "Charged_Ground_Slam",
+    "at": 0.28
+  },
+  "river_kappa": {
+    "clip": "Kung_Fu_Punch",
+    "at": 0.32
+  },
+  "toad_sage": {
+    "clip": "Charged_Ground_Slam",
+    "at": 0.28
+  },
+  "tempo_dj": {
+    "clip": "mage_soell_cast_3",
+    "at": 0.41
+  },
+  "halo_medic": {
+    "clip": "mage_soell_cast",
+    "at": 0.13
+  },
+  "kunai_adept": {
+    "clip": "Crouch_Pull_and_Throw",
+    "at": 0.57
+  },
+  "scout": {
+    "clip": "Archery_Shot",
+    "at": 0.62
+  },
+  "spirit_archer": {
+    "clip": "Archery_Shot",
+    "at": 0.62
+  },
+  "bombardier": {
+    "clip": "Crouch_Pull_and_Throw",
+    "at": 0.32
+  },
+  "sentinel": {
+    "clip": "Charged_Ground_Slam",
+    "at": 0.1
+  },
+  "hollow_revenant": {
+    "clip": "Charged_Slash",
+    "at": 0.55
+  },
+  "ninth_captain": {
+    "clip": "Right_Hand_Sword_Slash",
+    "at": 0.07
+  },
+  "void_stalker": {
+    "clip": "Right_Hand_Sword_Slash",
+    "at": 0.18
+  },
+  "crossbowman": {
+    "clip": "Cowboy_Quick_Draw_Shooting",
+    "at": 0.32
+  },
+  "dusk_gunslinger": {
+    "clip": "Cowboy_Quick_Draw_Shooting",
+    "at": 0.32
+  },
+  "rail_marksman": {
+    "clip": "Cowboy_Quick_Draw_Shooting",
+    "at": 0.32
+  },
+  "jet_trooper": {
+    "clip": "Cowboy_Quick_Draw_Shooting",
+    "at": 0.32
+  },
+  "smoke_kunoichi": {
+    "clip": "Right_Hand_Sword_Slash",
+    "at": 0.05
+  },
+  "turret_tinker": {
+    "clip": "Heavy_Hammer_Swing",
+    "at": 0.6
+  },
+  "skeleton": {
+    "clip": "Right_Hand_Sword_Slash",
+    "at": 0.2
+  },
+  "ghoul": {
+    "clip": "Right_Hand_Sword_Slash",
+    "at": 0.18
+  },
+  "bone_archer": {
+    "clip": "Archery_Shot",
+    "at": 0.7
+  }
+}
