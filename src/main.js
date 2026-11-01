@@ -13,7 +13,8 @@ import { ABILITIES, abilityArea } from './core/abilities.js';
 import { UNITS, DRAFTABLE } from './core/units.js';
 import { CORNERS, CORNER_NAMES, SYMMETRY, MAP_SIZES, BIOMES } from './core/mapgen.js';
 import { unitAt, unitKey, reachable, COMBAT, attackDice, defenseDice, damageOdds, has } from './core/rules.js';
-import { randomSeed } from './core/rng.js';
+import { randomSeed, hashSeed } from './core/rng.js';
+import { PeerLink, normalizeCode } from './net/peer.js';
 import { UI, HIGHLIGHT } from './ui/ui.js';
 import { DiceTray, DICE_MODES } from './ui/dice.js';
 import { DraftScreen } from './ui/draftScreen.js';
@@ -63,17 +64,29 @@ const ctx = { screen: 'setup', selectedId: null, inspectId: null, abilityKey: nu
 
 const ui = new UI({
   setting(name, value) {
+    if (name === 'joinCode') { online.joinCode = value; return; }
     settings[name] = ['teamSize', 'points', 'draftTimer'].includes(name) ? +value : value;
     saveSettings();
     if (name === 'backdrop') return env.setTheme(value); // scenery only: keep the map as is
-    if (name === 'dice' || name === 'draftTimer') return; // read when next needed
+    if (name === 'dice') return; // read when next needed
+    if (name === 'draftTimer') return sendConfig();
     if (name === 'hpStyle') return units.setBarStyle(value);
     if (name === 'graphics') { const q = resolveGraphics(value); view.setQuality(q); board.setDetail(q); return; }
+    if (name === 'opponent' && value !== 'online') leaveOnline();
     preview();
   },
   randomSeed() { settings.seed = randomSeed(); saveSettings(); preview(); },
-  start,
-  newGame() { clearTimeout(aiTimer); ctx.screen = 'setup'; ui.closeModal(); diceTray.hide(); preview(); },
+  start() {
+    if (settings.opponent === 'online') {
+      if (online.role !== 'host' || !net.connected) return;
+      net.send({ t: 'start' });
+    }
+    start();
+  },
+  newGame() { if (onlineGame()) net.send({ t: 'newGame' }); backToSetup(); },
+  hostOnline,
+  joinOnline,
+  leaveOnline: () => { leaveOnline(); refresh(); },
   camera: () => view.resetCamera(),
   settings: () => ui.showSettings(settings),
   closeModal: () => ui.closeModal(),
@@ -98,11 +111,20 @@ const diceTray = new DiceTray(document.getElementById('dice'));
 
 // ---------- game flow ----------
 
+// The match settings. Online, the host's settings are used on both sides (sent with every change).
+function matchConfig() {
+  if (online.role === 'guest' && online.config) return online.config;
+  const { seed, size, biome, symmetry, teamSize, points, draftTimer } = settings;
+  return { seed, size, biome, symmetry, teamSize, points, draftTimer };
+}
+
 function preview() {
+  const c = matchConfig();
   game = createGame({
-    seed: settings.seed, size: settings.size, biome: settings.biome, symmetry: settings.symmetry,
-    teamSize: settings.teamSize, points: settings.points, ai: [false, settings.opponent === 'cpu'],
+    seed: c.seed, size: c.size, biome: c.biome, symmetry: c.symmetry,
+    teamSize: c.teamSize, points: c.points, ai: [false, settings.opponent === 'cpu'],
   });
+  sendConfig();
   Object.assign(ctx, { selectedId: null, inspectId: null, abilityKey: null, placingId: null, peek: null, focusedFor: null });
   endDraft();
   board.build(game.map);
@@ -140,19 +162,34 @@ function start() {
   maybeAI();
 }
 
+// Is it this screen's turn to act? (Not the CPU's, and online not the friend's.)
 const isHuman = () => {
   if (ctx.screen !== 'game' || !game) return false;
   const p = currentPlayer(game);
-  return p !== null && p !== undefined && !game.players[p].ai;
+  if (p === null || p === undefined) return false;
+  return onlineGame() ? p === online.me : !game.players[p].ai;
 };
 
-async function act(action) {
+// Online, both screens run the same game: every action is applied on both sides in the same order.
+// The rules are deterministic (dice come from the seeded game state), so the games stay identical; a
+// hash of the state travels with each action to catch it if they ever don't.
+async function act(action, { remote = null } = {}) {
   if (busy || !game) return false;
+  if (onlineGame() && !remote && action.player !== online.me) return false; // the friend's turn
   const res = dispatch(game, action);
-  if (!res.ok) { ui.toast(res.error); return false; }
+  if (!res.ok) {
+    if (remote) { desync(`their move was refused here (${res.error})`); return false; }
+    ui.toast(res.error);
+    return false;
+  }
+  if (onlineGame()) {
+    if (remote) { if (remote.hash !== stateHash()) desync('the game states differ'); }
+    else net.send({ t: 'action', action, hash: stateHash() });
+  }
   busy = true;
   try { await play(res.events); } finally { busy = false; }
   afterAction();
+  pumpRemote();
   return true;
 }
 
@@ -176,7 +213,7 @@ function afterAction() {
 
 function maybeAI() {
   clearTimeout(aiTimer);
-  if (ctx.screen !== 'game' || !game || game.phase === 'over' || isHuman()) return;
+  if (ctx.screen !== 'game' || !game || game.phase === 'over' || isHuman() || onlineGame()) return;
   if (game.phase === 'draft' && draft.stage !== 'picking') return; // not during the map preview
   aiTimer = setTimeout(async () => {
     const action = aiAction(game);
@@ -458,7 +495,7 @@ function handleClick(k, unitId) {
 
 function refresh() {
   if (!game) return;
-  ui.renderSetup(settings, ctx.screen === 'setup');
+  ui.renderSetup(settings, ctx.screen === 'setup', { ...online, config: matchConfig(), connected: net.connected });
   ui.renderPhase(game, { ...ctx, human: isHuman() });
   ui.renderActionBar(game, { ...ctx, human: isHuman(), busy });
   ui.renderSide(game, { ...ctx, human: isHuman() });
@@ -692,7 +729,7 @@ function openDraftScreen() {
 // Show whose pick it is and restart the clock (after every pick).
 function renderDraft() {
   if (draft.stage !== 'picking' || game.phase !== 'draft') return;
-  draft.ends = performance.now() + settings.draftTimer * 1000;
+  draft.ends = performance.now() + draftSeconds() * 1000;
   draftScreen.render(game, { picker: currentPlayer(game), human: isHuman() });
 }
 
@@ -710,8 +747,8 @@ function draftTick() {
     if (left <= 0) openDraftScreen();
     return;
   }
-  if (!settings.draftTimer) { draftScreen.tick(null); return; }
-  draftScreen.tick(Math.max(0, left), settings.draftTimer);
+  if (!draftSeconds()) { draftScreen.tick(null); return; }
+  draftScreen.tick(Math.max(0, left), draftSeconds());
   if (left > 0 || !isHuman() || busy) return;
   // out of time: take the selected unit if it can be bought, else let the computer choose
   draft.ends = Infinity;
@@ -720,6 +757,127 @@ function draftTick() {
   const ok = item && item.takenBy === null && UNITS[item.key].cost <= game.settings.points - game.players[p].spent;
   ui.toast('Time! Auto-pick.');
   act({ type: 'draft', player: p, pid: ok ? item.pid : aiAction(game).pid });
+}
+
+// ---------- online play (two browsers, peer to peer) ----------
+// The host (Blue) picks the match settings and starts; the guest (Red) joins with the room code.
+// Each side sends its own actions; the other side applies them through act(..., { remote }).
+// Messages: hello (guest's version) · config (host's settings) · start · action · newGame · full
+
+const NET_VERSION = 1; // bump when the rules or the message format change, so mismatched builds don't play
+const online = { state: 'idle', role: null, code: null, me: null, config: null, joinCode: '', error: null, queue: [], warned: false };
+const net = new PeerLink({
+  onOpen() {
+    online.state = 'connected';
+    if (online.role === 'guest') net.send({ t: 'hello', v: NET_VERSION });
+    ui.toast(online.role === 'host' ? 'Your friend joined!' : 'Connected!');
+    refresh();
+  },
+  onMessage: onNetMessage,
+  onClose() {
+    const inGame = ctx.screen === 'game';
+    resetOnline();
+    if (inGame) { backToSetup(); ui.showNotice('Connection lost', 'Your friend left or the connection dropped. The game has ended.'); }
+    else { ui.toast('Your friend disconnected.'); refresh(); }
+  },
+  onError(e) { console.warn('[online]', e.type ?? e.message); },
+});
+
+const onlineGame = () => settings.opponent === 'online' && net.connected;
+const draftSeconds = () => matchConfig().draftTimer;
+const stateHash = () => hashSeed(JSON.stringify(game));
+
+function onNetMessage(msg) {
+  switch (msg?.t) {
+    case 'hello':
+      if (msg.v !== NET_VERSION) { net.send({ t: 'error', text: 'Your game is a different version. Reload the page and try again.' }); setTimeout(() => leaveOnline(), 500); return; }
+      sendConfig();
+      return;
+    case 'config':
+      online.config = msg.config;
+      if (ctx.screen === 'setup') preview();
+      return;
+    case 'start':
+      if (ctx.screen === 'setup') start();
+      return;
+    case 'action':
+      online.queue.push(msg);
+      pumpRemote();
+      return;
+    case 'newGame':
+      ui.toast('Your friend went back to the setup screen.');
+      backToSetup();
+      return;
+    case 'full':
+    case 'error':
+      online.error = msg.text ?? 'That game already has two players.';
+      leaveOnline(false);
+      refresh();
+      return;
+  }
+}
+
+// The friend's actions, applied one at a time once nothing is animating.
+function pumpRemote() {
+  if (busy || !online.queue.length || ctx.screen !== 'game') return;
+  const msg = online.queue.shift();
+  act(msg.action, { remote: { hash: msg.hash } }).then(pumpRemote);
+}
+
+function sendConfig() {
+  if (online.role === 'host' && net.connected) net.send({ t: 'config', config: matchConfig() });
+}
+
+function desync(why) {
+  console.warn('[online] out of sync:', why);
+  if (online.warned) return;
+  online.warned = true;
+  ui.showNotice('Out of sync', `The two games no longer match (${why}). Go back to the setup screen and start a new battle.`);
+}
+
+async function hostOnline() {
+  if (online.state !== 'idle') return;
+  Object.assign(online, { state: 'opening', role: 'host', me: 0, error: null });
+  refresh();
+  try {
+    online.code = await net.host();
+    online.state = 'waiting';
+  } catch (e) {
+    resetOnline(e.message || 'Could not open a room.');
+  }
+  refresh();
+}
+
+async function joinOnline() {
+  const code = normalizeCode(online.joinCode);
+  if (online.state !== 'idle' || code.length < 4) { online.error = 'Type the room code your friend sent you.'; refresh(); return; }
+  Object.assign(online, { state: 'joining', role: 'guest', me: 1, code, error: null });
+  refresh();
+  try { await net.join(code); } catch (e) {
+    net.close();
+    resetOnline(e.message || 'Could not join.');
+  }
+  refresh();
+}
+
+function leaveOnline(clearError = true) {
+  net.close();
+  resetOnline(clearError ? null : online.error);
+  if (ctx.screen === 'setup' && game) preview();
+}
+
+function resetOnline(error = null) {
+  Object.assign(online, { state: 'idle', role: null, code: null, me: null, config: null, error, queue: [], warned: false });
+}
+
+function backToSetup() {
+  clearTimeout(aiTimer);
+  ctx.screen = 'setup';
+  online.queue = [];
+  online.warned = false;
+  ui.closeModal();
+  diceTray.hide();
+  preview();
 }
 
 // ---------- settings ----------
@@ -770,4 +928,4 @@ preview();
 document.getElementById('loading').remove();
 
 // Debug handle for the browser console: __hex.game is the live state.
-window.__hex = { get game() { return game; }, board, units, gallery, view, act };
+window.__hex = { get game() { return game; }, board, units, gallery, view, act, online, get busy() { return busy; } };

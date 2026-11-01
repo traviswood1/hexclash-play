@@ -75,6 +75,13 @@ h3 { margin: 12px 0 6px; font-size: 12px; text-transform: uppercase; letter-spac
 .seed { display: flex; gap: 6px; }
 .seed input { flex: 1; }
 .seed button { flex: none; }
+/* online play box in the setup panel */
+.net-box { margin-top: 10px; padding: 10px; border-radius: var(--radius); border: 1px solid var(--border); background: rgba(255,255,255,.03); }
+.net-box p { margin: 0 0 8px; font-size: 13px; }
+.net-box .field { margin-top: 10px; }
+.net-code { font: 700 30px/1.2 Consolas, monospace; letter-spacing: 6px; text-align: center; color: var(--gold); margin: 4px 0 10px; user-select: all; }
+.net-err { color: #ff8a7a; }
+#setup input:disabled, #setup select:disabled, #setup button:disabled { opacity: .55; }
 .legend { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 10px; font-size: 12px; }
 .legend span { display: flex; align-items: center; gap: 6px; }
 .swatch { width: 12px; height: 12px; border-radius: 3px; display: inline-block; border: 1px solid rgba(0,0,0,.4); }

@@ -60,35 +60,75 @@ export class UI {
   }
 
   // ---------- setup ----------
-  renderSetup(settings, show) {
+  // net: the online session (main.js `online` plus { config, connected }); the guest sees the host's settings, locked
+  renderSetup(settings, show, net = {}) {
     const el = $('setup');
     el.classList.toggle('hidden', !show);
     if (!show) return;
+    const online = settings.opponent === 'online';
+    const guest = online && net.role === 'guest';
+    const c = net.config ?? settings;
+    const lock = guest ? 'disabled' : '';
     const opts = (obj, cur, label = v => v.name ?? v) => Object.entries(obj)
       .map(([k, v]) => `<option value="${k}" ${k === cur ? 'selected' : ''}>${esc(label(v))}</option>`).join('');
     el.innerHTML = `
       <h2>New battle</h2>
       <div class="field"><label>Map seed (same seed = same map)</label>
-        <div class="seed"><input data-setting="seed" value="${esc(settings.seed)}"><button data-act="randomSeed" title="Random seed">Roll</button></div></div>
+        <div class="seed"><input data-setting="seed" value="${esc(c.seed)}" ${lock}><button data-act="randomSeed" title="Random seed" ${lock}>Roll</button></div></div>
       <div class="row">
-        <div class="field"><label>Size</label><select data-setting="size">${opts(MAP_SIZES, settings.size)}</select></div>
-        <div class="field"><label>Biome</label><select data-setting="biome">${opts(BIOMES, settings.biome)}</select></div>
+        <div class="field"><label>Size</label><select data-setting="size" ${lock}>${opts(MAP_SIZES, c.size)}</select></div>
+        <div class="field"><label>Biome</label><select data-setting="biome" ${lock}>${opts(BIOMES, c.biome)}</select></div>
       </div>
-      <div class="field"><label>Symmetry (fairness)</label><select data-setting="symmetry">${opts(SYMMETRY, settings.symmetry)}</select></div>
+      <div class="field"><label>Symmetry (fairness)</label><select data-setting="symmetry" ${lock}>${opts(SYMMETRY, c.symmetry)}</select></div>
       <div class="row">
-        <div class="field"><label>Army points</label><select data-setting="points">${[15, 20, 25, 30, 35, 40].map(n => `<option ${n == settings.points ? 'selected' : ''}>${n}</option>`).join('')}</select></div>
-        <div class="field"><label>Max units</label><select data-setting="teamSize">${[4, 5, 6, 7].map(n => `<option ${n == settings.teamSize ? 'selected' : ''}>${n}</option>`).join('')}</select></div>
+        <div class="field"><label>Army points</label><select data-setting="points" ${lock}>${[15, 20, 25, 30, 35, 40].map(n => `<option ${n == c.points ? 'selected' : ''}>${n}</option>`).join('')}</select></div>
+        <div class="field"><label>Max units</label><select data-setting="teamSize" ${lock}>${[4, 5, 6, 7].map(n => `<option ${n == c.teamSize ? 'selected' : ''}>${n}</option>`).join('')}</select></div>
       </div>
       <div class="row">
-        <div class="field"><label>Opponent</label><select data-setting="opponent">
+        <div class="field"><label>Opponent</label><select data-setting="opponent" ${online && net.state !== 'idle' ? 'disabled' : ''}>
           <option value="cpu" ${settings.opponent === 'cpu' ? 'selected' : ''}>Computer</option>
-          <option value="human" ${settings.opponent === 'human' ? 'selected' : ''}>Hotseat (2 players)</option></select></div>
+          <option value="human" ${settings.opponent === 'human' ? 'selected' : ''}>Hotseat (2 players)</option>
+          <option value="online" ${online ? 'selected' : ''}>Online friend</option></select></div>
       </div>
-      <div class="stack"><button class="primary big" data-act="start">Start draft</button></div>
+      ${online ? this.onlineHtml(net) : '<div class="stack"><button class="primary big" data-act="start">Start draft</button></div>'}
       <h3>Terrain</h3>
       <div class="legend">${Object.values(TERRAIN).map(t =>
         `<span title="${esc(t.desc)}"><i class="swatch" style="background:#${t.color.toString(16).padStart(6, '0')}"></i>${t.name}</span>`).join('')}</div>
       <p class="muted" style="font-size:12px;margin:10px 0 0">Drag to rotate, right-drag or WASD to pan, scroll to zoom. Reroll until you like the map.</p>`;
+  }
+
+  // Host / join / waiting / connected, under the setup fields when the opponent is "Online friend".
+  onlineHtml(net) {
+    const err = net.error ? `<p class="net-err">${esc(net.error)}</p>` : '';
+    const leave = '<button data-act="leaveOnline">Leave</button>';
+    if (net.connected) {
+      return net.role === 'host'
+        ? `<div class="net-box"><p><span class="dot" style="background:#4f8cff"></span> Your friend is here. You play <b>Blue</b>.</p>
+            <p class="muted">They see your settings. Change anything, then start.</p>
+            <div class="stack"><button class="primary big" data-act="start">Start draft</button>${leave}</div></div>`
+        : `<div class="net-box"><p><span class="dot" style="background:#ff5c5c"></span> Connected. You play <b>Red</b>.</p>
+            <p class="muted">Waiting for your friend to start the game…</p><div class="stack">${leave}</div></div>`;
+    }
+    if (net.state === 'opening') return `<div class="net-box"><p class="muted">Opening a room…</p></div>`;
+    if (net.state === 'waiting') {
+      return `<div class="net-box"><p>Send your friend this code:</p><div class="net-code">${esc(net.code)}</div>
+        <p class="muted">Waiting for them to join… They pick <b>Online friend</b>, type the code and press Join.</p>
+        <div class="stack">${leave}</div></div>`;
+    }
+    if (net.state === 'joining') return `<div class="net-box"><p class="muted">Joining ${esc(net.code)}…</p></div>`;
+    return `<div class="net-box">${err}
+      <div class="stack"><button class="primary big" data-act="hostOnline">Host a game</button></div>
+      <div class="field"><label>Or join a friend's game</label>
+        <div class="seed"><input data-setting="joinCode" placeholder="Room code" maxlength="8" autocapitalize="characters" value="${esc(net.joinCode ?? '')}"><button data-act="joinOnline">Join</button></div></div>
+      <p class="muted" style="font-size:12px">Both players need this page open. The host picks the map and settings.</p></div>`;
+  }
+
+  // A message box with an OK button.
+  showNotice(title, text) {
+    const m = $('modal');
+    m.classList.remove('hidden');
+    m.innerHTML = `<div class="box settings"><h1>${esc(title)}</h1><p>${esc(text)}</p>
+      <div style="text-align:right;margin-top:12px"><button class="primary" data-act="closeModal">OK</button></div></div>`;
   }
 
   // ---------- battle action bar ----------
