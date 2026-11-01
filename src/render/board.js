@@ -171,7 +171,6 @@ function materials() {
     stone: shared(new THREE.MeshStandardMaterial({ map: tx.rock.map, roughness: 0.9, flatShading: true })),
     crystal: shared(new THREE.MeshStandardMaterial({ color: 0x9fdcff, emissive: 0x2a7fb8, emissiveIntensity: 0.35,
       roughness: 0.05, metalness: 0.1, transparent: true, opacity: 0.85, envMapIntensity: 2, flatShading: true })),
-    hotStone: shared(new THREE.MeshStandardMaterial({ color: 0x2a2220, emissive: 0xff5a14, emissiveIntensity: 0.35, roughness: 0.9, flatShading: true })),
     grassBits: shared(new THREE.MeshStandardMaterial({ roughness: 0.9 })),
     edge: shared(new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.32, depthWrite: false,
       polygonOffset: true, polygonOffsetFactor: -1 })),
@@ -287,7 +286,7 @@ export class BoardView {
   buildDecor(map) {
     const M = materials();
     const rnd = (k, i) => (hashSeed(`${k}:${i}`) % 10000) / 10000;
-    const items = { pine0: [], pine1: [], leafy0: [], leafy1: [], pineTrunk: [], leafyTrunk: [], rock0: [], rock1: [], rock2: [], hot: [], shard: [], bush: [], tuft: [] };
+    const items = { pine0: [], pine1: [], leafy0: [], leafy1: [], pineTrunk: [], leafyTrunk: [], rock0: [], rock1: [], rock2: [], shard: [], bush: [], tuft: [] };
     const put = (list, k, i, { r0 = 0.42, r1 = 0.68, s0 = 0.8, s1 = 1.1, y = 0, color = null, squash = 1 } = {}) => {
       const p = this.pos[k];
       const a = rnd(k, i) * Math.PI * 2, r = r0 + rnd(k, i + 50) * (r1 - r0), sc = s0 + rnd(k, i + 90) * (s1 - s0);
@@ -326,14 +325,12 @@ export class BoardView {
       } else if (t === 'ice') {
         const n = 1 + Math.floor(rnd(k, 1) * 3);
         for (let i = 0; i < n; i++) put(items.shard, k, i + 60, { s0: 0.6, s1: 1.3, y: -0.03 });
-      } else if (t === 'lava') {
-        if (rnd(k, 1) < 0.5) put(items.hot, k, 5, { s0: 0.6, s1: 1, squash: 0.6, y: -0.04 });
       }
     }
     const geos = { pine0: pineGeos[0], pine1: pineGeos[1], leafy0: leafyGeos[0], leafy1: leafyGeos[1], pineTrunk: pineTrunkGeo, leafyTrunk: leafyTrunkGeo,
-      rock0: rockGeos[0], rock1: rockGeos[1], rock2: rockGeos[2], hot: rockGeos[1], shard: shardGeo, bush: bushGeo, tuft: tuftGeo };
+      rock0: rockGeos[0], rock1: rockGeos[1], rock2: rockGeos[2], shard: shardGeo, bush: bushGeo, tuft: tuftGeo };
     const matFor = { pine0: M.pineLeaves, pine1: M.pineLeaves, leafy0: M.broadLeaves, leafy1: M.broadLeaves, pineTrunk: M.trunk, leafyTrunk: M.trunk,
-      rock0: M.stone, rock1: M.stone, rock2: M.stone, hot: M.hotStone, shard: M.crystal, bush: M.foliage, tuft: M.grassBits };
+      rock0: M.stone, rock1: M.stone, rock2: M.stone, shard: M.crystal, bush: M.foliage, tuft: M.grassBits };
     for (const [name, list] of Object.entries(items)) {
       if (!list.length) continue;
       const mesh = new THREE.InstancedMesh(geos[name], matFor[name], list.length);

@@ -42,6 +42,7 @@ export function updateFx(dt) {
 
 // Text that rises from a world position, e.g. "-3" in red.
 export function floatText(pos, text, color = '#fff', small = false) {
+  if (!pos) return; // the unit has no figure on the board right now (e.g. just removed)
   const el = document.createElement('div');
   el.textContent = text;
   el.style.color = color;
