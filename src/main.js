@@ -7,7 +7,7 @@ import { DraftGallery } from './render/gallery.js';
 import { createEnvironment, loadTable, THEMES } from './render/environment.js';
 import { initFx, updateFx, floatText, burst, rise, zap, wait, tween } from './render/fx.js';
 import { loadManifest, preloadUnits } from './render/loader.js';
-import { createGame, dispatch, currentPlayer, unitOptions, canActivate, playerUnits } from './core/game.js';
+import { createGame, dispatch, currentPlayer, unitOptions, canActivate, playerUnits, allowedCorners } from './core/game.js';
 import { aiAction } from './core/ai.js';
 import { ABILITIES, abilityArea } from './core/abilities.js';
 import { UNITS, DRAFTABLE } from './core/units.js';
@@ -23,7 +23,7 @@ import * as SFX from './render/skillFx.js';
 import { attackStyle, fireRanged, meleeHit } from './render/attackFx.js';
 
 const SETTINGS_KEY = 'hexclash.settings';
-const DEFAULTS = { seed: randomSeed(), size: 'medium', biome: 'mixed', symmetry: 'three', teamSize: 6, points: 25, opponent: 'cpu', dice: 'full', backdrop: 'night', draftTimer: 30, hpStyle: 'pips', graphics: 'auto' };
+const DEFAULTS = { seed: randomSeed(), size: 'medium', biome: 'mixed', symmetry: 'fair', teamSize: 6, points: 25, opponent: 'cpu', dice: 'full', backdrop: 'night', draftTimer: 30, hpStyle: 'pips', graphics: 'auto' };
 // Graphics 'auto' picks low on phones and tablets (touch-first or small screens).
 const resolveGraphics = g => g !== 'auto' ? g
   : matchMedia('(pointer: coarse)').matches || Math.min(screen.width, screen.height) < 700 ? 'low' : 'high';
@@ -528,8 +528,9 @@ function refreshHighlights() {
   if (ctx.screen === 'setup') {
     CORNERS.forEach(c => zone(c, COLORS.zone));
   } else if (game.phase === 'corners') {
-    const hoverCorner = CORNERS.find(c => game.map.zones[c].includes(ctx.hoverKey));
-    CORNERS.forEach(c => zone(c, owner(c)?.color ?? (c === hoverCorner && isHuman() ? '#ffe08a' : COLORS.zone), c === hoverCorner));
+    const open = allowedCorners(game); // after the first pick, only the evenly spaced corners are left
+    const hoverCorner = CORNERS.find(c => open.includes(c) && game.map.zones[c].includes(ctx.hoverKey));
+    CORNERS.forEach(c => (owner(c) || open.includes(c)) && zone(c, owner(c)?.color ?? (c === hoverCorner && isHuman() ? '#ffe08a' : COLORS.zone), c === hoverCorner));
   } else if (game.phase === 'draft') {
     CORNERS.forEach(c => owner(c) && zone(c, owner(c).color));
   } else if (game.phase === 'placement') {
@@ -764,7 +765,7 @@ function draftTick() {
 // Each side sends its own actions; the other side applies them through act(..., { remote }).
 // Messages: hello (guest's version) · config (host's settings) · start · action · newGame · full
 
-const NET_VERSION = 1; // bump when the rules or the message format change, so mismatched builds don't play
+const NET_VERSION = 2; // bump when the rules or the message format change, so mismatched builds don't play
 const online = { state: 'idle', role: null, code: null, me: null, config: null, joinCode: '', error: null, queue: [], warned: false };
 const net = new PeerLink({
   onOpen() {

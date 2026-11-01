@@ -7,7 +7,7 @@ import { MAP_SIZES, BIOMES, SYMMETRY, CORNERS, CORNER_NAMES } from '../core/mapg
 import { COMBAT } from '../core/rules.js';
 import { SWORD, SHIELD } from './icons.js';
 import { THEMES } from '../render/environment.js';
-import { playerUnits, liveUnitsOf, activationsLeft, canActivate, unitOptions, slotOf } from '../core/game.js';
+import { playerUnits, liveUnitsOf, activationsLeft, canActivate, unitOptions, slotOf, allowedCorners } from '../core/game.js';
 
 // Highlight colours on the board, shared with main.js so the legend always matches.
 export const HIGHLIGHT = {
@@ -250,13 +250,14 @@ export class UI {
   }
 
   cornersHtml(game, ctx) {
+    const open = allowedCorners(game);
     return `<h2>Choose your corner</h2>
       <div class="corners">${CORNERS.map(c => {
         const owner = game.players.find(p => p.corner === c);
-        return `<button data-act="pickCorner" data-arg="${c}" ${owner || !ctx.human ? 'disabled' : ''}>
+        return `<button data-act="pickCorner" data-arg="${c}" ${owner || !open.includes(c) || !ctx.human ? 'disabled' : ''}>
           ${owner ? `<span class="dot" style="background:${owner.color}"></span> ` : ''}${CORNER_NAMES[c]}</button>`;
       }).join('')}</div>
-      <p class="muted" style="font-size:12px">Click a glowing zone on the board or a button. The first to pick a corner deploys first and takes the first turn; the other player gets the first unit pick. The units you'll draft stand on the left.</p>
+      <p class="muted" style="font-size:12px">Click a glowing zone on the board or a button. The first pick is free; everyone else starts evenly spaced from it (2 players: the opposite corner). The first to pick deploys first and takes the first turn; the others get the first unit picks. The units you'll draft stand on the left.</p>
       ${this.poolListHtml(game, false)}`;
   }
 
@@ -450,8 +451,8 @@ export class UI {
     m.classList.remove('hidden');
     m.innerHTML = `<div class="box"><h1>How to play</h1>
       <h3>Setup</h3><ul>
-        <li>Generate a map you like. The board is a big hexagon with 6 possible start corners. Symmetry makes matching corners identical (3-way: every other corner; 6-way: all of them).</li>
-        <li><b>Corner draft</b>: players pick a start corner. The first to pick deploys first and takes the first turn; the other player gets the first unit pick.</li>
+        <li>Generate a map you like. The board is a big hexagon with 6 possible start corners. Fair symmetry gives every start corner the same ground.</li>
+        <li><b>Corner draft</b>: the first player picks any start corner; everyone else starts evenly spaced from it (2 players: the opposite corner, 3 players: every other corner). The first to pick deploys first and takes the first turn; the others get the first unit picks.</li>
         <li><b>Unit draft</b>: the pool stands beside the board. Hover a unit for its stats and abilities; take turns picking (snake order).</li>
         <li><b>Deploy</b>: place your units in your corner zone.</li></ul>
       <h3>Your turn</h3><ul>

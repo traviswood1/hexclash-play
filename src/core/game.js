@@ -26,7 +26,7 @@ export const ACTIVATIONS_PER_TURN = 2; // different units a player may move/act 
 
 export function createGame(opts = {}) {
   const settings = {
-    seed: 'hexclash', size: 'medium', biome: 'mixed', symmetry: 'three',
+    seed: 'hexclash', size: 'medium', biome: 'mixed', symmetry: 'fair',
     players: 2, teamSize: 6, points: 25, ai: [], ...opts,
   };
   const { seed, players, teamSize } = settings;
@@ -64,6 +64,19 @@ function buildPool(seed, count) {
 }
 
 // ---------- queries for UI / AI ----------
+
+// Corners the current picker may take. The first pick is free; after that, starts are spaced evenly
+// around the board from it (2 players: opposite corners; 3 players: every other corner). Player
+// counts that don't divide 6 have no spacing rule.
+export function allowedCorners(state) {
+  const free = CORNERS.filter(c => !state.players.some(p => p.corner === c));
+  const first = state.players[state.queue[0]]?.corner;
+  const n = state.players.length;
+  if (state.phase !== 'corners' || !first || 6 % n) return free;
+  const i = CORNERS.indexOf(first), step = 6 / n;
+  const spaced = Array.from({ length: n - 1 }, (_, k) => CORNERS[(i + (k + 1) * step) % 6]);
+  return free.filter(c => spaced.includes(c));
+}
 
 export function currentPlayer(state) {
   if (state.phase === 'battle') return state.turn.player;
@@ -149,9 +162,18 @@ const HANDLERS = {
     if (state.phase !== 'corners') fail('Not picking corners now.');
     if (!CORNERS.includes(corner)) fail('No such corner.');
     if (state.players.some(p => p.corner === corner)) fail('That corner is taken.');
+    if (!allowedCorners(state).includes(corner)) fail('Pick a highlighted corner: starts stay evenly spaced around the board.');
     state.players[player].corner = corner;
     emit({ type: 'corner', player, corner });
-    if (++state.qi < state.queue.length) return;
+    state.qi++;
+    // anyone left with only one possible corner gets it straight away (2 players: the opposite corner)
+    while (state.qi < state.queue.length) {
+      const options = allowedCorners(state);
+      if (options.length !== 1) return;
+      const p = state.queue[state.qi++];
+      state.players[p].corner = options[0];
+      emit({ type: 'corner', player: p, corner: options[0], auto: true });
+    }
     // Balance: picking a corner first is an edge (the better ground), and so is moving last (the
     // other side has to walk into range first). So the first to pick a corner deploys first and
     // moves first, and the others, in reverse corner order, get the earlier unit picks. The draft

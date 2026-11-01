@@ -34,10 +34,11 @@ export const BIOMES = {
 };
 
 // value = how many rotated copies of the map are identical
+// Start corners are spaced evenly (opposite for 2 players, every other corner for 3), so 'fair' repeats
+// the map once per player: every start gets the same ground. fold null = the player count.
 export const SYMMETRY = {
-  three: { name: '3-way (alternate corners match)', fold: 3 },
+  fair:  { name: 'Fair (every start matches)', fold: null },
   six:   { name: '6-way (all corners match)', fold: 6 },
-  two:   { name: '2-way (opposite corners match)', fold: 2 },
   none:  { name: 'None (fully random)', fold: 1 },
 };
 
@@ -48,10 +49,10 @@ export const oppositeCorner = c => CORNERS[(CORNERS.indexOf(c) + 3) % 6];
 
 const LIQUID_OR_HAZARD = new Set(['water', 'lava', 'ice']);
 
-export function generateMap({ seed, size = 'medium', biome = 'mixed', symmetry = 'three', zoneSize = 9 }) {
+export function generateMap({ seed, size = 'medium', biome = 'mixed', symmetry = 'fair', players = 2, zoneSize = 9 }) {
   let map;
   for (let attempt = 0; attempt < 25; attempt++) {
-    map = buildMap({ seed: attempt ? `${seed}#${attempt}` : seed, size, biome, symmetry, zoneSize });
+    map = buildMap({ seed: attempt ? `${seed}#${attempt}` : seed, size, biome, symmetry, players, zoneSize });
     for (let pass = 0; pass < 3 && !zonesConnected(map); pass++) smooth(map);
     if (zonesConnected(map)) break;
   }
@@ -95,10 +96,10 @@ function equalize(values) {
   });
 }
 
-function buildMap({ seed, size, biome, symmetry, zoneSize }) {
+function buildMap({ seed, size, biome, symmetry, players, zoneSize }) {
   const R = (MAP_SIZES[size] ?? MAP_SIZES.medium).radius;
   const B = BIOMES[biome] ?? BIOMES.mixed;
-  const fold = (SYMMETRY[symmetry] ?? SYMMETRY.three).fold;
+  const fold = (SYMMETRY[symmetry] ?? SYMMETRY.fair).fold ?? (6 % players === 0 ? players : 1);
   const base = hashSeed(seed);
   const nHeight = makeNoise(base), nWet = makeNoise(base ^ 0x9e3779b9);
   const nHeat = makeNoise(base ^ 0x85ebca6b), nFeat = makeNoise(base ^ 0xc2b2ae35);

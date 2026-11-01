@@ -5,7 +5,7 @@
 import { UNITS } from './units.js';
 import { ABILITIES, validTargets } from './abilities.js';
 import { CORNERS, oppositeCorner } from './mapgen.js';
-import { currentPlayer, liveUnitsOf, playerUnits, canActivate, slotOf, pointsLeft } from './game.js';
+import { currentPlayer, liveUnitsOf, playerUnits, canActivate, slotOf, pointsLeft, allowedCorners } from './game.js';
 import * as R from './rules.js';
 import { distance } from './hex.js';
 import { hashSeed } from './rng.js';
@@ -25,7 +25,7 @@ export function aiAction(state) {
 }
 
 function chooseCorner(state, player) {
-  const free = CORNERS.filter(c => !state.players.some(p => p.corner === c));
+  const free = allowedCorners(state); // after the first pick, starts are spaced evenly
   const taken = state.players.map(p => p.corner).filter(Boolean);
   // Ground quality: higher zones are better. Prefer corners far from the enemy (opposite first).
   const ground = c => state.map.zones[c].reduce((s, k) => s + state.map.cells[k].elev, 0) / state.map.zones[c].length;
