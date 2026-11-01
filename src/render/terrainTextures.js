@@ -180,7 +180,7 @@ export function terrainTextures() {
 
 // Photo-based CC0 terrain sets from Poly Haven (assets/textures, see CREDITS.md): { map, normal, rough }.
 // Loaded once; the textures fill in when the images arrive.
-export const PHOTO_SETS = ['grass', 'forest', 'sand', 'rock', 'snow', 'cliff'];
+export const PHOTO_SETS = ['grass', 'sand', 'rock', 'snow', 'cliff']; // forest tiles use the grass set too
 // colour maps drained toward grey (0..1): the rock photo has green moss that reads like forest
 const DESATURATE = { rock: 0.3 };
 let photos = null;

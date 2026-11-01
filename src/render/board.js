@@ -155,7 +155,7 @@ function materials() {
     side: photo('cliff', SIDE_SCALE, { normalScale: new THREE.Vector2(1.2, 1.2) }, { side: true }),
     caps: {
       grass: photo('grass', PHOTO_SCALE, { color: 0xa6d86a }), // the photo is dry and brown; tint it green
-      forest: photo('forest', PHOTO_SCALE),
+      forest: photo('grass', PHOTO_SCALE, { color: 0x8fc25c }), // grass ground, a shade deeper; the trees mark it as forest
       sand: photo('sand', PHOTO_SCALE),
       rock: photo('rock', PHOTO_SCALE, { color: 0xc4c6ca, normalScale: new THREE.Vector2(1.5, 1.5) }),
       snow: photo('snow', PHOTO_SCALE, { envMapIntensity: 0.25 }),
