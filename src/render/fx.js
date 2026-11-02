@@ -12,7 +12,10 @@ export function initFx(s, cam, r, layer) {
 export const ease = t => (t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2);
 
 // Calls fn(t) with t going 0..1 over `dur` seconds. Resolves when done.
+// In a hidden tab the browser throttles timers to once a second or slower, so animations would crawl
+// and an online friend's moves would pile up behind them: there, tweens finish at once.
 export function tween(dur, fn) {
+  if (document.hidden) { fn(1); return Promise.resolve(); }
   return new Promise(resolve => tweens.push({ t: 0, dur: Math.max(0.001, dur), fn, resolve }));
 }
 export const wait = sec => tween(sec, () => {});

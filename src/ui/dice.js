@@ -25,6 +25,7 @@ export class DiceTray {
   // e: { atkRolls, defRolls, atkMods, defMods, hits, blocks, damage, label }
   // names: { attacker, defender } as HTML; rules: { hit, block } thresholds
   async roll(e, { names, rules, quick = false }) {
+    if (document.hidden) return; // hidden tab: no tray (see fx.js tween)
     const t = quick ? 0.55 : 1.05;          // tumble time (s)
     const hold = quick ? 0.45 : 0.9;        // time to read the result
     this.el.innerHTML = `

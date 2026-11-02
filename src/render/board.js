@@ -279,6 +279,14 @@ export class BoardView {
     this.hover.renderOrder = 3;
     this.hover.visible = false;
     this.group.add(this.hover);
+
+    // line of sight: a row of glowing dots from the attacker to the hovered hex (see showSight)
+    this.sight = new THREE.InstancedMesh(new THREE.SphereGeometry(0.055, 8, 6),
+      new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.95, depthTest: false }), 64);
+    this.sight.count = 0;
+    this.sight.renderOrder = 4;
+    this.sight.frustumCulled = false;
+    this.group.add(this.sight);
   }
 
   // Trees, rocks, bushes and grass. Placement comes from a hash of the hex, so a map always
@@ -398,6 +406,29 @@ export class BoardView {
       m.instanceMatrix.needsUpdate = true;
       if (m.instanceColor) m.instanceColor.needsUpdate = true;
     }
+  }
+
+  // Line of sight from one hex to another at eye height: green while clear, red from the blocking hex on.
+  // blocker: the hex that blocks it, or null. Pass no `from` to hide it.
+  showSight(from, to, blocker = null) {
+    if (!this.sight) return;
+    if (!from || !to || !this.pos[from] || !this.pos[to]) { this.sight.count = 0; return; }
+    const a = this.worldPos(from).add(new THREE.Vector3(0, 0.9, 0)), b = this.worldPos(to).add(new THREE.Vector3(0, 0.7, 0));
+    const stop = blocker ? this.worldPos(blocker) : null;
+    const n = Math.min(64, Math.max(4, Math.round(a.distanceTo(b) / 0.22)));
+    let blocked = false;
+    for (let i = 0; i < n; i++) {
+      tmp.position.lerpVectors(a, b, (i + 0.5) / n);
+      if (stop && !blocked) blocked = Math.hypot(tmp.position.x - stop.x, tmp.position.z - stop.z) < 0.9;
+      tmp.rotation.set(0, 0, 0);
+      tmp.scale.setScalar(1);
+      tmp.updateMatrix();
+      this.sight.setMatrixAt(i, tmp.matrix);
+      this.sight.setColorAt(i, col.set(blocked ? '#ff4d4d' : '#7dffb0'));
+    }
+    this.sight.count = n;
+    this.sight.instanceMatrix.needsUpdate = true;
+    if (this.sight.instanceColor) this.sight.instanceColor.needsUpdate = true;
   }
 
   setHover(k, color = 0xffffff) {

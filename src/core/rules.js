@@ -60,10 +60,9 @@ export function movePoints(unit, state) {
 // Rules: can pass allies but not enemies; entering a hex next to an enemy ends the move
 // (engagement); flyers ignore terrain, height, engagement and can pass over anyone.
 // Phase Shift units ignore engagement and pass through enemies, but still pay for terrain.
-export function reachable(state, unit) {
+export function reachable(state, unit, budget = movePoints(unit, state)) {
   const fly = has(unit, 'flight');
   const phase = fly || has(unit, 'phaseShift');
-  const budget = movePoints(unit, state);
   const start = unitKey(unit);
   const best = { [start]: { cost: 0, hazard: 0, prev: null } };
   const open = [start];
@@ -83,6 +82,7 @@ export function reachable(state, unit) {
       const occ = unitAt(state, n, unit.id);
       if (occ && occ.owner !== unit.owner && !phase) continue;
       const step = stepCost(unit, from, to);
+      if (step === Infinity) continue; // a drop too big to take
       const cost = node.cost + step;
       if (cost > budget) continue;
       const hazard = node.hazard + (!fly && hurtsOnEntry(unit, to) ? 1 : 0);
@@ -109,18 +109,55 @@ export function pathTo(reach, start, dest) {
   return path;
 }
 
+// Why a hex can or can't be moved to, for the hover breakdown:
+// { ok, cost, budget, steps: [{ key, terrain, base, climb, lava }], engaged, reason }
+export function movePlan(state, unit, toKey) {
+  const budget = movePoints(unit, state), start = unitKey(unit);
+  const occupant = unitAt(state, toKey, unit.id);
+  if (occupant) return { ok: false, budget, steps: [], reason: occupant.owner === unit.owner ? 'An ally is standing there.' : 'An enemy is standing there.' };
+  const all = reachable(state, unit, Infinity);
+  if (!all[toKey]) return { ok: false, budget, steps: [], reason: 'No way through: enemies, a cliff or engagement block every path.' };
+  const path = pathTo(all, start, toKey), fly = has(unit, 'flight');
+  const steps = path.slice(1).map((k, i) => {
+    const from = cell(state, path[i]), to = cell(state, k);
+    return { key: k, terrain: to.terrain, base: fly ? 1 : moveCostInto(unit, to), climb: fly ? 0 : Math.max(0, to.elev - from.elev), lava: !fly && hurtsOnEntry(unit, to) };
+  });
+  const cost = all[toKey].cost;
+  const engaged = !fly && !has(unit, 'phaseShift') && adjacentEnemies(state, toKey, unit.owner, unit.id).length > 0;
+  return { ok: cost <= budget, cost, budget, steps, engaged, reason: cost > budget ? `Needs ${cost} move, has ${budget}.` : null };
+}
+
 // Ranged line of sight. Blocked by a hex in between that is 2+ levels above both ends,
 // or by forest in between. Units never block sight.
 export function hasSight(state, fromKey, toKey) {
+  return sightBlocker(state, fromKey, toKey) === null;
+}
+
+// The first hex blocking the line of sight between two hexes, or null when it's clear.
+export function sightBlocker(state, fromKey, toKey) {
   const a = cell(state, fromKey), b = cell(state, toKey);
   const top = Math.max(a.elev, b.elev) + 2;
   const ks = line(fromKey, toKey);
   for (let i = 1; i < ks.length - 1; i++) {
     const c = cell(state, ks[i]);
     if (!c) continue;
-    if (c.elev >= top || TERRAIN[c.terrain].blocksSight) return false;
+    if (c.elev >= top || TERRAIN[c.terrain].blocksSight) return ks[i];
   }
-  return true;
+  return null;
+}
+
+// Hexes `unit` could hit from fromKey: in range, line of sight for ranged units, melee height reach.
+export function attackArea(state, unit, fromKey = unitKey(unit)) {
+  const range = def(unit).range, out = [];
+  const reachBonus = range > 1 && has(unit, 'sharpshooter') ? 1 : 0;
+  for (const k of state.map.keys) {
+    const d = distance(fromKey, k);
+    if (d < 1 || d > range + reachBonus) continue;
+    if (range === 1) { if (Math.abs(cell(state, fromKey).elev - cell(state, k).elev) <= COMBAT.MELEE_REACH) out.push(k); continue; }
+    const r = range + (reachBonus ? Math.max(0, Math.min(1, cell(state, fromKey).elev - cell(state, k).elev)) : 0);
+    if (d <= r && hasSight(state, fromKey, k)) out.push(k);
+  }
+  return out;
 }
 
 export function attackRange(state, unit, target, fromKey = unitKey(unit)) {

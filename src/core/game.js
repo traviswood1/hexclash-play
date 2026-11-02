@@ -22,7 +22,7 @@ import { key, distance } from './hex.js';
 
 export const PLAYER_COLORS = ['#3d8bff', '#ff4d4d', '#3ccf6e', '#f2c230'];
 export const PLAYER_NAMES = ['Blue', 'Red', 'Green', 'Gold'];
-export const ACTIONS_PER_TURN = 4; // a move, an attack or a skill each costs 1; every unit can move once and act once per turn
+export const ACTIONS_PER_TURN = 4; // a move, an attack or a skill each costs 1; units may move any number of times but act once per turn
 
 export function createGame(opts = {}) {
   const settings = {
@@ -123,20 +123,20 @@ export function actionsLeft(state) {
   return t ? t.actions - t.used : 0;
 }
 
-// Can this unit still do something this turn: actions left, and it hasn't both moved and acted.
+// Can this unit still do something this turn? Any unit can, while actions are left (moving is never
+// used up; acting is once per unit, see unitOptions).
 export function canActivate(state, unit) {
   if (state.phase !== 'battle' || !unit?.alive || unit.owner !== state.turn.player) return false;
   if (state.turn.fresh?.includes(unit.id)) return false; // raised this turn
-  const s = slotOf(state, unit);
-  return actionsLeft(state) > 0 && !(s.moved && s.acted);
+  return actionsLeft(state) > 0;
 }
 
 // Everything the UI needs to show for a selected unit.
 export function unitOptions(state, unit) {
   const t = slotOf(state, unit);
   const ok = canActivate(state, unit);
-  const canMove = ok && !t.moved;
-  const canAct = ok && !t.acted;
+  const canMove = ok;            // moving again is allowed, each move costs an action
+  const canAct = ok && !t.acted; // one attack or action skill per unit per turn
   return {
     canMove, canAct,
     reach: canMove ? R.reachable(state, unit) : {},
@@ -266,7 +266,6 @@ const HANDLERS = {
 
   move(state, { player, unitId, to }, emit) {
     const unit = activatable(state, player, unitId);
-    if (slotOf(state, unit).moved) fail('This unit already moved.');
     const reach = R.reachable(state, unit);
     if (!reach[to]) fail('Cannot move there.');
     const full = R.pathTo(reach, R.unitKey(unit), to);
@@ -285,7 +284,7 @@ const HANDLERS = {
     }
     const end = state.map.cells[path[path.length - 1]];
     Object.assign(unit, { q: end.q, r: end.r });
-    commit(state, unit, { moved: true, movedDistance: path.length - 1 });
+    commit(state, unit, { moved: true, movedDistance: slotOf(state, unit).movedDistance + path.length - 1 });
     emit({ type: 'move', unit: unit.id, path, fly });
     for (let i = 0; i < burns.length && unit.alive; i++) applyDamage(state, emit, unit, 2, 'Lava');
   },
@@ -308,7 +307,7 @@ const HANDLERS = {
     if (!ab || ab.kind !== 'active' || !UNITS[unit.key].abilities.includes(ability)) fail('No such ability.');
     if (unit.cooldowns[ability]) fail(`${ab.name} is recharging.`);
     const slot = slotOf(state, unit);
-    if (ab.usesMove ? slot.moved : slot.acted) fail(`This unit already ${ab.usesMove ? 'moved' : 'acted'}.`);
+    if (!ab.usesMove && slot.acted) fail('This unit already acted this turn.');
     if (!validTargets(state, unit, ability).includes(target)) fail('Invalid target.');
     commit(state, unit, ab.usesMove ? { moved: true } : { acted: true });
     unit.cooldowns[ability] = ab.cooldown;

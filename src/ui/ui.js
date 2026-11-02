@@ -12,8 +12,21 @@ import { playerUnits, liveUnitsOf, actionsLeft, canActivate, unitOptions, slotOf
 
 // Highlight colours on the board, shared with main.js so the legend always matches.
 export const HIGHLIGHT = {
-  move: '#4fc3ff', risky: '#ffd23a', attack: '#ff4d4d', target: '#b78cff', area: '#ffb347', ready: '#ffd76a',
+  move: '#4fc3ff', risky: '#ffd23a', attack: '#ff4d4d', range: '#ff8f6b', target: '#b78cff', area: '#ffb347', ready: '#ffd76a',
 };
+
+// Status effects: short name and what they do (bottom bar chips, unit cards).
+export const STATUS_INFO = {
+  slowed:    { name: 'Slowed', icon: '🐌', desc: '-2 move until the end of its next turn.' },
+  braced:    { name: 'Braced', icon: '🛡', desc: '+2 defense dice until the start of its next turn.' },
+  empowered: { name: 'War Cry', icon: '📯', desc: '+2 attack dice on its next attack.' },
+  shield:    { name: 'Barrier', icon: '🔰', desc: 'Soaks up damage before health is lost. Fades after 2 turns.' },
+  released:  { name: 'Released', icon: '⚡', desc: '+2 attack dice and +1 defense die while it lasts.' },
+  poison:    { name: 'Poisoned', icon: '☠', desc: 'Loses 1 health at the start of each of its turns.' },
+  cowed:     { name: 'Cowed', icon: '😨', desc: '-1 attack die until the end of its next turn.' },
+};
+// e.g. "Barrier 3" / "Poisoned 2": the number is what's left (shield points, poison turns, release turns)
+export const statusLabel = (unit, k) => `${STATUS_INFO[k]?.name ?? k}${['shield', 'poison', 'released'].includes(k) && unit.status[k] > 0 ? ` ${unit.status[k]}` : ''}`;
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
@@ -48,6 +61,16 @@ export class UI {
       if (e.key !== 'Enter' || e.target.dataset.setting !== 'joinCode') return;
       this.h.setting('joinCode', e.target.value);
       this.h.joinOnline();
+    });
+    // status chips: hover for what the effect does
+    $('hud').addEventListener('mouseover', e => {
+      const chip = e.target.closest('[data-status]');
+      if (!chip) { if (this.statusTip) { this.statusTip = false; this.hideTip(); } return; }
+      const info = STATUS_INFO[chip.dataset.status];
+      if (!info) return;
+      this.statusTip = true;
+      const r = chip.getBoundingClientRect();
+      this.showTip(`<div class="st-tip"><b>${info.icon} ${esc(info.name)}</b><div>${esc(info.desc)}</div></div>`, r.left - 10, r.top - 40);
     });
     $('hud').addEventListener('mouseover', e => {
       const el = e.target.closest('[data-peek]');
@@ -180,6 +203,15 @@ export class UI {
       <p class="muted" style="font-size:12px">Both players need this page open. The host picks the map and settings.</p></div>`;
   }
 
+  // Move breakdown beside the pointer: cost per step (terrain + climbing), total against the unit's move.
+  moveTipHtml(plan, TERRAIN) {
+    const steps = plan.steps.map(st => `<span class="mv-step">${esc(TERRAIN[st.terrain].name)} ${st.base}${st.climb ? ` <i>+${st.climb}↑</i>` : ''}${st.lava ? ' <b class="hot">burns 2</b>' : ''}</span>`).join('');
+    const head = plan.ok ? `<b>Move ${plan.cost} / ${plan.budget}</b>` : `<b class="no">Can't move here</b>`;
+    return `<div class="mv-tip">${head}${plan.steps.length ? `<div class="mv-steps">${steps}</div>` : ''}
+      ${plan.reason ? `<div class="muted">${esc(plan.reason)}</div>` : ''}
+      ${plan.ok && plan.engaged ? '<div class="muted">Stops next to an enemy: entering a hex beside an enemy ends a move.</div>' : ''}</div>`;
+  }
+
   // A message box with an OK button.
   showNotice(title, text) {
     const m = $('modal');
@@ -205,7 +237,7 @@ export class UI {
     const t = game.turn, pl = game.players[t.player], left = actionsLeft(game);
     const pips = Array.from({ length: t.actions }, (_, i) => `<i class="${i < left ? '' : 'used'}"></i>`).join('');
     const turn = `<span class="ab-turn" style="--pc:${pl.color}"><span class="dot" style="background:${pl.color}"></span>${esc(pl.name)}<small>R${game.round}</small></span>
-      <span class="ab-pips" title="Actions left this turn: a move, an attack or a skill costs 1. Each unit can move once and act once.">${pips}</span>`;
+      <span class="ab-pips" title="Actions left this turn: a move, an attack or a skill costs 1. Units can move again and again, but attack once per turn.">${pips}</span>`;
     const end = ctx.human ? `<button class="primary ab-end" data-act="endTurn" ${ctx.busy ? 'disabled' : ''} title="End turn (Enter)">End turn</button>` : '';
     if (!ctx.human) {
       el.innerHTML = `${turn}<span class="ab-wait"><span class="ab-spin"></span>${pl.ai ? 'Thinking…' : 'Their turn…'}</span>`;
@@ -217,7 +249,7 @@ export class UI {
       return;
     }
     const o = unitOptions(game, sel), slot = slotOf(game, sel);
-    const canMove = !slot.moved && Object.keys(o.reach).length > 0;
+    const canMove = o.canMove && Object.keys(o.reach).length > 0; // moving again is allowed (1 action each)
     const canAttack = !slot.acted && o.attackTargets.length > 0;
     const btn = (act, label, on, ok, title) => `<button class="ab-btn ${on ? 'on' : ''}" data-act="${act}" ${ok ? '' : 'disabled'} title="${esc(title)}">${label}</button>`;
     const skills = o.abilities.filter(a => a.kind === 'active').map(a => {
@@ -225,9 +257,11 @@ export class UI {
       const why = a.cooldownLeft ? `${a.cooldownLeft}` : '';
       return `<button class="ab-btn skill" data-act="ability" data-arg="${a.key}" ${a.ready ? '' : 'disabled'} title="${esc(a.name)}: ${esc(a.desc)}">${esc(a.name)}${why ? `<small>⟳${why}</small>` : ''}</button>`;
     }).join('');
-    el.innerHTML = `${turn}<span class="ab-sel">${esc(UNITS[sel.key].name)}</span>
-      ${btn('modeMove', 'Move', !ctx.abilityKey && ctx.mode === 'move', canMove, slot.moved ? 'Already moved this turn' : 'Show where it can move')}
-      ${btn('modeAttack', 'Attack', !ctx.abilityKey && ctx.mode === 'attack', canAttack, slot.acted ? 'Already acted this turn' : canAttack ? 'Show enemies in range' : 'No enemy in range')}
+    const statuses = Object.keys(sel.status).filter(k => STATUS_INFO[k]).map(k =>
+      `<span class="ab-status" data-status="${k}">${STATUS_INFO[k].icon} ${esc(statusLabel(sel, k))}</span>`).join('');
+    el.innerHTML = `${turn}<span class="ab-sel">${esc(UNITS[sel.key].name)}</span>${statuses}
+      ${btn('modeMove', 'Move', !ctx.abilityKey && ctx.mode === 'move', canMove, canMove ? `Show where it can move${slot.moved ? ' (again, 1 action)' : ''}` : 'Nowhere to move')}
+      ${btn('modeAttack', 'Attack', !ctx.abilityKey && ctx.mode === 'attack', !slot.acted, slot.acted ? 'Already attacked this turn' : canAttack ? 'Show range and enemies you can hit' : 'Show range (no enemy in range yet)')}
       ${skills}${end}`;
   }
 
@@ -408,8 +442,8 @@ export class UI {
     const owner = unit ? game.players[unit.owner] : null;
     const opts = what.options;
     const f = unit ? unit.hp / unit.maxHp : 1;
-    const statuses = unit ? Object.keys(unit.status).filter(s => s !== 'shieldTurns').map(s => `<span class="status">${{ slowed: 'Slowed', braced: 'Braced', empowered: 'War Cry', shield: `Barrier ${unit.status.shield}`,
-      released: `Released (${unit.status.released - 1 > 0 ? `${unit.status.released - 1} more` : 'last'} turn)`, poison: `Poison ${unit.status.poison}`, cowed: 'Cowed' }[s] ?? s}</span>`).join('') : '';
+    const statuses = unit ? Object.keys(unit.status).filter(s => STATUS_INFO[s]).map(s =>
+      `<span class="status" data-status="${s}" title="${esc(STATUS_INFO[s].desc)}">${STATUS_INFO[s].icon} ${esc(statusLabel(unit, s))}</span>`).join('') : '';
     return `
       <div class="uc-head"><span class="dot" style="background:${owner?.color ?? d.color};width:14px;height:14px"></span>
         <div><div class="name">${esc(d.name)}</div><div class="muted" style="font-size:12px">${d.role}${owner ? ` · ${esc(owner.name)}` : ''}</div></div></div>
@@ -490,15 +524,16 @@ export class UI {
       for (let r = 0; r < rounds.length; r++) {
         const rolls = rounds[r], last = r === rounds.length - 1;
         const frame = (dice, note) => { el.innerHTML = `<div class="init-box"><h2>Roll for first pick</h2><div class="dice-row">${dice}</div><p>${note}</p><small>click to skip</small></div>`; };
-        for (let t = 0; t < 10 && !skip; t++) {
+        // tumbling faces that slow down before they land (about 2.5 s)
+        for (let t = 0; t < 22 && !skip; t++) {
           frame(rolls.map((_, p) => die(p, 1 + Math.floor(Math.random() * 20), 'spin')).join(''), 'Rolling…');
-          await sleep(70);
+          await sleep(50 + t * t * 0.45);
         }
         const top = Math.max(...rolls);
         const winner = rolls.indexOf(top);
         frame(rolls.map((v, p) => die(p, v, last && p === winner ? 'win' : '')).join(''),
           last ? `<b style="color:${game.players[winner].color}">${esc(game.players[winner].name)}</b> picks the first corner` : 'Tie! Roll again');
-        await sleep(last ? 1400 : 800);
+        await sleep(last ? 2200 : 1300);
       }
       el.remove();
     })();
@@ -544,8 +579,8 @@ export class UI {
         <li><b>Unit draft</b>: the pool stands beside the board. Hover a unit for its stats and abilities; take turns picking (snake order).</li>
         <li><b>Deploy</b>: place your units in your corner zone.</li></ul>
       <h3>Your turn</h3><ul>
-        <li>You have <b>4 actions</b> each turn. A <b>move</b>, an <b>attack</b> or a <b>skill</b> costs 1 action. Spread them over any of your units: each unit can move once and act once per turn, in either order. <b>Enter</b> ends your turn.</li>
-        <li>Click one of your units to see where it can move (the <b>Move</b> button); <b>Attack</b> shows enemies in range. Hover any unit for its stats and abilities.</li>
+        <li>You have <b>4 actions</b> each turn. A <b>move</b>, an <b>attack</b> or a <b>skill</b> costs 1 action. Spread them over any of your units: a unit can move as many times as you have actions, but attacks or uses an action skill only once per turn. <b>Enter</b> ends your turn.</li>
+        <li>Click one of your units to see where it can move (the <b>Move</b> button); hover a hex for the move cost. <b>Attack</b> shows its range; for ranged units, hover a hex to see the line of sight (green clear, red blocked). Hover any unit for its stats and abilities.</li>
         <li><b>Moving</b> costs 1 per hex, plus 1 for each level up (a 2-level step costs 3). Some terrain costs more to enter. Drops of up to 3 levels cost nothing extra; bigger drops aren't allowed. Flyers ignore height and terrain.</li>
         <li>Entering a hex next to an enemy stops your move (engagement). You can walk through allies, not enemies.</li>
         <li>Ranged attacks need line of sight: forest and hexes 2+ levels above both units block it.</li></ul>

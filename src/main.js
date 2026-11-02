@@ -11,8 +11,9 @@ import { createGame, dispatch, currentPlayer, unitOptions, canActivate, playerUn
 import { aiAction } from './core/ai.js';
 import { ABILITIES, abilityArea } from './core/abilities.js';
 import { UNITS, DRAFTABLE } from './core/units.js';
+import { TERRAIN } from './core/terrain.js';
 import { CORNERS, CORNER_NAMES, SYMMETRY, MAP_SIZES, BIOMES } from './core/mapgen.js';
-import { unitAt, unitKey, reachable, COMBAT, attackDice, defenseDice, damageOdds, has } from './core/rules.js';
+import { unitAt, unitKey, reachable, COMBAT, attackDice, defenseDice, damageOdds, has, movePlan, attackArea, sightBlocker } from './core/rules.js';
 import { randomSeed, hashSeed } from './core/rng.js';
 import { RelayLink, normalizeCode } from './net/relay.js';
 import { UI, HIGHLIGHT } from './ui/ui.js';
@@ -213,6 +214,8 @@ function afterAction() {
   if (ctx.inspectId && !game.units[ctx.inspectId]?.alive) ctx.inspectId = null;
   ctx.abilityKey = null;
   tipUnit = null; // units may have moved or changed: the next hover redraws the pop-up
+  ctx.movePath = null;
+  board.showSight(null);
   if (game.phase === 'placement') {
     const p = currentPlayer(game);
     const placing = game.units[ctx.placingId];
@@ -265,7 +268,8 @@ async function play(events) {
         break;
       case 'turn':
         ui.addLog(`— ${pname(e.player)}'s turn (round ${e.round}) —`);
-        ui.banner(`${game.players[e.player].name}'s turn`, game.players[e.player].color);
+        if (onlineGame() && e.player === online.me) ui.banner('Your turn!', '#e8bd57');
+        else ui.banner(`${game.players[e.player].name}'s turn`, game.players[e.player].color);
         break;
       case 'move':
         units.setSelected(e.unit);
@@ -427,7 +431,8 @@ function defaultMode(u) {
 }
 function setMode(mode) {
   if (!ctx.selectedId) return;
-  Object.assign(ctx, { mode, abilityKey: null });
+  Object.assign(ctx, { mode, abilityKey: null, movePath: null });
+  board.showSight(null);
   refresh();
 }
 function inspect(id) {
@@ -435,6 +440,7 @@ function inspect(id) {
   refresh();
 }
 function cancel() {
+  board.showSight(null);
   if (ctx.abilityKey) ctx.abilityKey = null;
   else Object.assign(ctx, { selectedId: null, inspectId: null });
   refresh();
@@ -515,8 +521,16 @@ function handleClick(k, unitId) {
 
 // ---------- rendering the UI state ----------
 
+// Online, a background tab's title says when it's your turn.
+function updateTitle() {
+  const mine = onlineGame() && ctx.screen === 'game' && game?.phase !== 'over' && isHuman();
+  document.title = mine && document.hidden ? '⚔ Your turn! · Hex Clash' : 'Hex Clash';
+}
+document.addEventListener('visibilitychange', updateTitle);
+
 function refresh() {
   if (!game) return;
+  updateTitle();
   ui.renderSetup(settings, ctx.screen === 'setup', { ...online, config: matchConfig(), connected: net.connected });
   ui.renderPhase(game, { ...ctx, human: isHuman() });
   ui.renderActionBar(game, { ...ctx, human: isHuman(), busy });
@@ -569,10 +583,13 @@ function refreshHighlights() {
           abilityArea(game, ctx.abilityKey, hovered, sel).forEach(k => items.push({ key: k, color: COLORS.area, strong: true }));
         }
       } else if (ctx.mode === 'attack') {
+        // range: every hex it could hit from here (line of sight for ranged units), enemies in it strong
+        attackArea(game, sel).forEach(k => items.push({ key: k, color: COLORS.range }));
         o.attackTargets.forEach(id => items.push({ key: unitKey(game.units[id]), color: COLORS.attack, strong: true }));
       } else {
         Object.keys(o.reach).forEach(k => items.push({ key: k, color: o.reach[k].hazard ? COLORS.risky : COLORS.move }));
         o.attackTargets.forEach(id => items.push({ key: unitKey(game.units[id]), color: COLORS.attack })); // can still click them
+        ctx.movePath?.forEach(k => items.push({ key: k, color: '#ffffff', strong: true })); // the hovered route
       }
       readyUnits(sel.id).forEach(u => items.push({ key: unitKey(u), color: COLORS.ready }));
       items.push({ key: unitKey(sel), color: '#ffffff' });
@@ -666,7 +683,8 @@ function hoverAt(ev) {
   const attack = attackPreview(unitId, ev);
   if (attack) tipUnit = null;
   else if (pid !== undefined && pid !== null) { tipUnit = null; galleryHover(pid, ev); }
-  else if (!unitHover(unitId)) galleryHover(null, ev);
+  else if (!unitHover(unitId) && !moveHover(k, ev)) galleryHover(null, ev);
+  sightHover(k);
   const shown = attack ? 'attack' : pid !== undefined && pid !== null ? 'pool' : null;
   if (k === ctx.hoverKey && unitId === ctx.hoverUnit) return shown;
   ctx.hoverKey = k;
@@ -675,11 +693,31 @@ function hoverAt(ev) {
   board.setHover(k);
   ui.renderHexInfo(game, k);
   if (unitChanged) { if (unitId) ctx.peek = null; renderCard(); }
-  if (ctx.abilityKey || game.phase === 'corners') refreshHighlights();
+  if (ctx.abilityKey || ctx.selectedId || game.phase === 'corners') refreshHighlights();
   return shown;
 }
 
 canvas.addEventListener('pointerleave', () => galleryHover(null));
+
+// Attack mode with a ranged unit: hovering a hex draws the line of sight to it (green clear, red blocked).
+function sightHover(k) {
+  const sel = ctx.selectedId && game.units[ctx.selectedId];
+  const show = k && sel && !ctx.abilityKey && ctx.mode === 'attack' && game.phase === 'battle' && isHuman()
+    && UNITS[sel.key].range > 1 && k !== unitKey(sel);
+  board.showSight(show ? unitKey(sel) : null, k, show ? sightBlocker(game, unitKey(sel), k) : null);
+}
+
+// Moving: hovering a hex shows what the move would cost, step by step, and why it can't go there.
+function moveHover(k, ev) {
+  const sel = ctx.selectedId && game.units[ctx.selectedId];
+  ctx.movePath = null;
+  if (!k || !sel || ctx.abilityKey || ctx.mode !== 'move' || game.phase !== 'battle' || !isHuman() || k === unitKey(sel)) return false;
+  const plan = movePlan(game, sel, k);
+  if (plan.ok) ctx.movePath = plan.steps.map(s => s.key);
+  tipUnit = null;
+  ui.showTip(ui.moveTipHtml(plan, TERRAIN), ev.clientX, ev.clientY);
+  return true;
+}
 
 // Hovering a unit on the board shows its card (stats, abilities, statuses) beside it.
 let tipUnit = null;
@@ -808,7 +846,7 @@ function draftTick() {
 // Each side sends its own actions; the other side applies them through act(..., { remote }).
 // Messages: hello (guest's version) · config (host's settings) · start · action · newGame · full
 
-const NET_VERSION = 3; // bump when the rules or the message format change, so mismatched builds don't play
+const NET_VERSION = 4; // bump when the rules or the message format change, so mismatched builds don't play
 const online = { state: 'idle', role: null, code: null, me: null, config: null, joinCode: '', error: null, queue: [], warned: false };
 const net = new RelayLink({
   onOpen() {

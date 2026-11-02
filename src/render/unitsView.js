@@ -139,13 +139,15 @@ export class UnitsView {
   // Health display in the chosen style (Settings > Health bar style): see BAR_STYLES below.
   // `ghost` (0..1 of max) is recently lost health, drawn pale while it drains away.
   drawBar(view, unit, ghost = 0) {
-    const key = `${this.barStyle}/${unit.hp}/${unit.maxHp}/${view.dim}/${ghost.toFixed(3)}`;
+    const shield = unit.status?.shield ?? 0;
+    const key = `${this.barStyle}/${unit.hp}/${unit.maxHp}/${shield}/${view.dim}/${ghost.toFixed(3)}`;
     if (view.lastHp === key) return;
     view.lastHp = key;
     view.hpShown = unit.hp;
     const g = view.canvas.getContext('2d');
     g.clearRect(0, 0, BAR_W, BAR_H);
     (BAR_STYLES[this.barStyle] ?? drawPill)(g, unit, view.team ?? '#ffffff', ghost);
+    if (shield) drawBarrier(g, shield);
     const size = this.barStyle === 'pips' ? BAR_SCREEN * 1.2 : BAR_SCREEN; // pips need a little more room to read
     view.bar.scale.set(size, size * BAR_H / BAR_W, 1);
     view.tex.needsUpdate = true;
@@ -1057,3 +1059,31 @@ function drawMinimal(g, unit, team, ghost) {
 }
 
 export const BAR_STYLES = { pips: drawPips, pill: drawPill, plate: drawPlate, minimal: drawMinimal };
+
+// A barrier (Sacred Barrier's shield) on top of any style: a pale-blue glow around the bar and a shield
+// badge with the points it will soak up, over the right end.
+function drawBarrier(g, amount) {
+  g.save();
+  g.lineWidth = 4;
+  g.strokeStyle = 'rgba(140, 210, 255, 0.95)';
+  g.shadowColor = 'rgba(140, 210, 255, 0.9)';
+  g.shadowBlur = 8;
+  g.beginPath(); g.roundRect(3, 3, BAR_W - 6, BAR_H - 6, 12); g.stroke();
+  g.restore();
+  const x = BAR_W - 40, y = 2, w = 36, h = BAR_H - 4;
+  g.beginPath();
+  g.moveTo(x, y); g.lineTo(x + w, y); g.lineTo(x + w, y + h * 0.55);
+  g.quadraticCurveTo(x + w, y + h * 0.9, x + w / 2, y + h);
+  g.quadraticCurveTo(x, y + h * 0.9, x, y + h * 0.55);
+  g.closePath();
+  g.fillStyle = '#5fb8ff';
+  g.fill();
+  g.lineWidth = 3;
+  g.strokeStyle = 'rgba(6, 8, 14, 0.9)';
+  g.stroke();
+  g.font = '800 22px "Segoe UI", sans-serif';
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.fillStyle = '#ffffff';
+  g.fillText(String(amount), x + w / 2, y + h * 0.45);
+}

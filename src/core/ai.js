@@ -138,21 +138,21 @@ function chooseBattleAction(state, player) {
   for (const u of liveUnitsOf(state, player)) {
     if (!canActivate(state, u)) continue;
     const slot = slotOf(state, u);
-    if (slot.moved && slot.acted) continue;
     const start = R.unitKey(u);
     const spots = [{ k: start, hazard: 0, moved: slot.movedDistance }];
-    if (!slot.moved) {
-      for (const [k, info] of Object.entries(R.reachable(state, u))) {
-        if (info.hazard * 2 >= u.hp) continue; // don't walk into lava to die
-        spots.push({ k, hazard: info.hazard, moved: distance(start, k) });
-      }
+    // a unit can move again (each move costs an action), but once it has acted it only moves on
+    // when that clearly helps, so spare actions aren't wasted shuffling back and forth
+    for (const [k, info] of Object.entries(R.reachable(state, u))) {
+      if (info.hazard * 2 >= u.hp) continue; // don't walk into lava to die
+      spots.push({ k, hazard: info.hazard, moved: slot.movedDistance + distance(start, k) });
     }
     // Score each plan as a gain over doing nothing with this unit, so units are compared fairly.
     const idle = positionScore(state, u, start);
     for (const spot of spots) {
       const plan = standingAt(u, state, spot.k, () => {
         const act = slot.acted ? { score: 0, action: null } : bestActionAt(state, u, spot.k, spot.moved);
-        return { act, gain: act.score + positionScore(state, u, spot.k) - spot.hazard * 1.2 - idle };
+        const moveCost = spot.k !== start ? (slot.moved ? 0.35 : 0.1) : 0; // spending an action to reposition
+        return { act, gain: act.score + positionScore(state, u, spot.k) - spot.hazard * 1.2 - idle - moveCost };
       });
       if (!best || plan.gain > best.gain) best = { unit: u, spot, start, ...plan };
     }
