@@ -85,8 +85,10 @@ export class UI {
     bar.id = 'actionBar';
     bar.className = 'panel hidden';
     $('hud').append(bar);
-    // map setup: the unit pool is a tray that slides in from the right edge, closed by default
+    // the right-hand panel is a tray that slides in from the right edge, closed by default: the unit pool on
+    // the setup screen, the armies and battle log during a battle (phones fold it to a strip instead)
     this.poolOpen = false;
+    this.unitsOpen = false;
     this.poolFilter = 'all';
     this.poolSearch = '';
     this.poolSortKey = 'cost';
@@ -130,7 +132,10 @@ export class UI {
     const tab = document.createElement('button');
     tab.id = 'poolTab';
     tab.className = 'hidden';
-    tab.onclick = () => { this.poolOpen = !this.poolOpen; this.syncTray(); };
+    tab.onclick = () => {
+      if (this.trayMode === 'units') this.unitsOpen = !this.unitsOpen; else this.poolOpen = !this.poolOpen;
+      this.syncTray();
+    };
     $('hud').append(tab);
   }
 
@@ -289,6 +294,7 @@ export class UI {
   renderSide(game, ctx) {
     const el = $('side');
     this.setup = ctx.screen === 'setup';
+    this.trayMode = this.setup ? 'pool' : ['battle', 'over'].includes(game.phase) ? 'units' : null;
     this.syncTray();
     if (this.setup) { el.innerHTML = this.poolHtml(game); return; }
     const fn = { corners: this.cornersHtml, draft: this.draftHtml, placement: this.placementHtml, battle: this.battleHtml, over: this.battleHtml }[game.phase];
@@ -300,12 +306,16 @@ export class UI {
   }
 
   syncTray() {
-    const open = this.setup && this.poolOpen;
-    $('side').classList.toggle('tray', this.setup);
-    $('side').classList.toggle('open', open);
-    $('poolTab').classList.toggle('hidden', !this.setup);
-    $('poolTab').classList.toggle('open', open);
-    $('poolTab').textContent = open ? 'Hide pool ▸' : '◂ Unit pool';
+    const mode = this.trayMode;
+    const open = mode === 'pool' ? this.poolOpen : mode === 'units' ? this.unitsOpen : false;
+    const side = $('side'), tab = $('poolTab');
+    side.classList.toggle('tray', !!mode);
+    side.classList.toggle('pooltray', mode === 'pool');
+    side.classList.toggle('open', open);
+    tab.classList.toggle('hidden', !mode);
+    tab.classList.toggle('open', open);
+    tab.classList.toggle('units', mode === 'units');
+    tab.textContent = mode === 'units' ? (open ? 'Hide units ▸' : '◂ Units') : (open ? 'Hide pool ▸' : '◂ Unit pool');
   }
 
   // Setup screen's pool tray: search, role filters and a portrait grid; hovering a tile shows its full card.

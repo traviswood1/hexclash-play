@@ -352,7 +352,8 @@ h3 { margin: 12px 0 6px; font-size: 12px; text-transform: uppercase; letter-spac
   margin-top: -20px; border-radius: 10px 10px 0 0; border-bottom: none; background: var(--panel); color: var(--gold);
   font-weight: 600; padding: 7px 16px; transition: right .25s ease; white-space: nowrap; }
 #poolTab.open { right: min(584px, calc(100% - 24px)); }
-#side.tray { width: min(560px, calc(100% - 28px)); }
+#poolTab.units.open { right: 354px; } /* the armies tray is the normal panel width */
+#side.pooltray { width: min(560px, calc(100% - 28px)); }
 .pt-filters { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
 .pt-filters button { padding: 5px 10px; font-size: 12px; }
 .pt-filters button.on { border-color: var(--gold); color: var(--gold); }
@@ -363,7 +364,7 @@ h3 { margin: 12px 0 6px; font-size: 12px; text-transform: uppercase; letter-spac
 .pt-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; }
 .pt-grid .ds-tile { cursor: default; }
 #poolTab.hidden { display: none; }
-@media (max-width: 760px) { #poolTab { display: none; } }
+@media (max-width: 760px) { #poolTab { display: none; } #side.tray:not(.pooltray) { transform: none; } } /* phones fold it instead */
 
 /* ---------- battle action bar: turn, activations, the selected unit's steps and options ---------- */
 /* battle action bar: one compact row along the bottom, so the board around the units stays visible */
