@@ -158,7 +158,7 @@ export function attackDice(state, attacker, defender, base, ctx = {}) {
     const u = unitAt(state, n, attacker.id);
     return u && u.owner === attacker.owner;
   })) mods.push(['Flanking', 2]);
-  const moved = ctx.movedDistance ?? (state.turn?.active === attacker.id ? state.turn.movedDistance : 0);
+  const moved = ctx.movedDistance ?? state.turn?.units?.[attacker.id]?.movedDistance ?? 0;
   if (has(attacker, 'charge') && moved >= 3) mods.push(['Charge', 1]);
   if (has(attacker, 'frenzy') && attacker.hp * 2 <= attacker.maxHp) mods.push(['Frenzy', 1]);
   if (alliesNear(state, fromKey, attacker.owner, 2, [attacker.id]).some(u => has(u, 'rally'))) mods.push(['Rallied', 1]);

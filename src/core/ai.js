@@ -154,8 +154,6 @@ function chooseBattleAction(state, player) {
         const act = slot.acted ? { score: 0, action: null } : bestActionAt(state, u, spot.k, spot.moved);
         return { act, gain: act.score + positionScore(state, u, spot.k) - spot.hazard * 1.2 - idle };
       });
-      // switching away from a half-used unit wastes the rest of its activation
-      if (state.turn.active && state.turn.active !== u.id && (state.turn.moved || state.turn.acted)) plan.gain -= 0.3;
       if (!best || plan.gain > best.gain) best = { unit: u, spot, start, ...plan };
     }
   }

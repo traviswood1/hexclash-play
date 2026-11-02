@@ -7,7 +7,8 @@ import { MAP_SIZES, BIOMES, SYMMETRY, CORNERS, CORNER_NAMES } from '../core/mapg
 import { COMBAT } from '../core/rules.js';
 import { SWORD, SHIELD } from './icons.js';
 import { THEMES } from '../render/environment.js';
-import { playerUnits, liveUnitsOf, activationsLeft, canActivate, unitOptions, slotOf, allowedCorners } from '../core/game.js';
+import { FILTERS } from './draftScreen.js';
+import { playerUnits, liveUnitsOf, actionsLeft, canActivate, unitOptions, slotOf, allowedCorners } from '../core/game.js';
 
 // Highlight colours on the board, shared with main.js so the legend always matches.
 export const HIGHLIGHT = {
@@ -24,6 +25,16 @@ export class UI {
     $('hud').addEventListener('click', e => {
       // phones: the side panel's handle folds it down to a strip so the board stays visible
       if (e.target.closest('.side-handle')) { $('side').classList.toggle('folded'); return; }
+      const logToggle = e.target.closest('.log-toggle');
+      if (logToggle) {
+        this.logOpen = !this.logOpen;
+        const tray = logToggle.parentElement;
+        tray.classList.toggle('open', this.logOpen);
+        logToggle.querySelector('i').textContent = this.logOpen ? '▾' : '▸';
+        const log = tray.querySelector('.log');
+        log.scrollTop = log.scrollHeight;
+        return;
+      }
       const el = e.target.closest('[data-act]');
       if (!el || el.disabled) return;
       const fn = this.h[el.dataset.act];
@@ -46,13 +57,36 @@ export class UI {
     $('btnCamera').onclick = () => this.h.camera();
     $('btnHelp').onclick = () => this.showHelp();
     $('btnSettings').onclick = () => this.h.settings();
-    // battle: what's happening and what you can do, across the top of the board
+    // battle: whose turn, actions left and the selected unit's Move / Attack / skills, along the bottom
     const bar = document.createElement('div');
     bar.id = 'actionBar';
     bar.className = 'panel hidden';
     $('hud').append(bar);
     // map setup: the unit pool is a tray that slides in from the right edge, closed by default
     this.poolOpen = false;
+    this.poolFilter = 'all';
+    this.poolSearch = '';
+    // pool tray: filters, search and hover cards (the grid is redrawn in place so the search box keeps focus)
+    $('hud').addEventListener('input', e => {
+      if (e.target.dataset.poolSearch === undefined) return;
+      this.poolSearch = e.target.value;
+      if (this.poolGame) $('ptGrid').innerHTML = this.poolGridHtml(this.poolGame);
+    });
+    $('hud').addEventListener('click', e => {
+      const f = e.target.closest('[data-pool-filter]');
+      if (!f || !this.poolGame) return;
+      this.poolFilter = f.dataset.poolFilter;
+      document.querySelectorAll('[data-pool-filter]').forEach(b => b.classList.toggle('on', b === f));
+      $('ptGrid').innerHTML = this.poolGridHtml(this.poolGame);
+    });
+    $('hud').addEventListener('mouseover', e => {
+      const tile = e.target.closest('[data-pool-key]');
+      if (!tile) { if (this.poolTipKey) { this.poolTipKey = null; this.hideTip(); } return; }
+      if (tile.dataset.poolKey === this.poolTipKey) return;
+      this.poolTipKey = tile.dataset.poolKey;
+      const r = $('side').getBoundingClientRect(), t = tile.getBoundingClientRect();
+      this.showTip(this.unitCardHtml(this.poolGame, { type: this.poolTipKey }), r.left, t.top + t.height / 2, 'left');
+    });
     const tab = document.createElement('button');
     tab.id = 'poolTab';
     tab.className = 'hidden';
@@ -137,9 +171,9 @@ export class UI {
       <div style="text-align:right;margin-top:12px"><button class="primary" data-act="closeModal">OK</button></div></div>`;
   }
 
-  // ---------- battle action bar ----------
-  // Always answers: whose turn is it, how many units can still act, what is the selected unit able to
-  // do right now, and how do I do it. ctx: { screen, human, selectedId, abilityKey, busy }
+  // ---------- battle action bar (bottom of the screen) ----------
+  // Compact: whose turn, the turn's action pips, and for the selected unit just Move / Attack / its skills.
+  // ctx: { screen, human, selectedId, abilityKey, mode, busy }
   renderActionBar(game, ctx) {
     const el = $('actionBar');
     const show = ctx.screen === 'game' && (game.phase === 'battle' || game.phase === 'over');
@@ -147,59 +181,37 @@ export class UI {
     if (!show) return;
     if (game.phase === 'over') {
       const w = game.winner;
-      el.innerHTML = `<div class="ab-row"><b class="ab-big">${w === null ? 'Draw!' : `${esc(game.players[w].name)} wins!`}</b>
-        <span class="muted">Every enemy unit has fallen.</span><button class="primary" data-act="newGame">New battle</button></div>`;
+      el.innerHTML = `<b class="ab-big">${w === null ? 'Draw!' : `${esc(game.players[w].name)} wins!`}</b>
+        <button class="primary" data-act="newGame">New battle</button>`;
       return;
     }
-    const t = game.turn, pl = game.players[t.player];
-    const used = t.limit - activationsLeft(game);
-    const pips = Array.from({ length: t.limit }, (_, i) => `<i class="${i < used ? 'used' : ''}"></i>`).join('');
-    const head = `<div class="ab-row">
-      <span class="ab-turn" style="--pc:${pl.color}"><span class="dot" style="background:${pl.color}"></span>${esc(pl.name)}'s turn</span>
-      <span class="tag">Round ${game.round}</span>
-      <span class="ab-pips" title="Each turn you activate up to ${t.limit} different units">${pips}<small>${activationsLeft(game)} of ${t.limit} unit${t.limit === 1 ? '' : 's'} left to activate</small></span>
-      <span class="ab-gap"></span>
-      ${ctx.human ? `<button class="primary" data-act="endTurn" ${ctx.busy ? 'disabled' : ''} title="Enter">End turn</button>` : ''}</div>`;
+    const t = game.turn, pl = game.players[t.player], left = actionsLeft(game);
+    const pips = Array.from({ length: t.actions }, (_, i) => `<i class="${i < left ? '' : 'used'}"></i>`).join('');
+    const turn = `<span class="ab-turn" style="--pc:${pl.color}"><span class="dot" style="background:${pl.color}"></span>${esc(pl.name)}<small>R${game.round}</small></span>
+      <span class="ab-pips" title="Actions left this turn: a move, an attack or a skill costs 1. Each unit can move once and act once.">${pips}</span>`;
+    const end = ctx.human ? `<button class="primary ab-end" data-act="endTurn" ${ctx.busy ? 'disabled' : ''} title="End turn (Enter)">End turn</button>` : '';
     if (!ctx.human) {
-      el.innerHTML = head + `<div class="ab-guide"><span class="ab-spin"></span>${esc(pl.name)}${pl.ai ? ' (computer)' : ''} is taking its turn…</div>`;
+      el.innerHTML = `${turn}<span class="ab-wait"><span class="ab-spin"></span>${pl.ai ? 'Thinking…' : 'Their turn…'}</span>`;
       return;
     }
     const sel = ctx.selectedId && game.units[ctx.selectedId];
-    const legend = keys => `<div class="ab-legend">${keys.map(([c, label]) => `<span><i style="background:${HIGHLIGHT[c]}"></i>${label}</span>`).join('')}</div>`;
     if (!sel || !canActivate(game, sel)) {
-      const ready = liveUnitsOf(game, t.player).filter(u => canActivate(game, u));
-      const chips = ready.map(u => `<button class="ab-chip" data-act="selectUnit" data-arg="${u.id}"><span class="dot" style="background:${UNITS[u.key].color}"></span>${esc(UNITS[u.key].name)}</button>`).join('');
-      el.innerHTML = head + (ready.length
-        ? `<div class="ab-guide"><b>Pick a unit to activate.</b> Click one of your glowing units, or a name here:</div><div class="ab-chips">${chips}</div>${legend([['ready', 'can act']])}`
-        : `<div class="ab-guide"><b>All your activations are used.</b> Press <b>End turn</b> (or Enter).</div>`);
+      el.innerHTML = `${turn}<span class="ab-hint">${left ? 'Pick a unit' : 'No actions left'}</span>${end}`;
       return;
     }
-    const d = UNITS[sel.key], o = unitOptions(game, sel), slot = slotOf(game, sel);
-    const nReach = Object.keys(o.reach).length, nAtk = o.attackTargets.length;
-    const actives = o.abilities.filter(a => a.kind === 'active');
-    const step = (n, label, done, detail) => `<div class="ab-step ${done ? 'done' : ''}"><span class="n">${done ? '✓' : n}</span><div><b>${label}</b><small>${detail}</small></div></div>`;
-    const moveDetail = slot.moved ? 'done' : nReach ? `click a blue hex (${d.move} move)` : 'nowhere to go';
-    const actDetail = slot.acted ? 'done' : nAtk ? `click a red enemy to attack (${nAtk} in range)` : actives.some(a => a.ready) ? 'use an ability below' : 'no target in range yet';
-    const abButtons = actives.map(a => {
-      const why = a.cooldownLeft ? `${a.cooldownLeft} turn${a.cooldownLeft > 1 ? 's' : ''}` : !a.ready ? (a.usesMove ? (slot.moved ? 'moved' : 'no target') : (slot.acted ? 'acted' : 'no target')) : '';
-      return ctx.abilityKey === a.key ? `<button class="ab-ab on" data-act="cancel">Cancel ${esc(a.name)}</button>`
-        : `<button class="ab-ab" data-act="ability" data-arg="${a.key}" ${a.ready ? '' : 'disabled'} title="${esc(a.desc)}">${esc(a.name)}${why ? ` <small>${why}</small>` : ''}</button>`;
+    const o = unitOptions(game, sel), slot = slotOf(game, sel);
+    const canMove = !slot.moved && Object.keys(o.reach).length > 0;
+    const canAttack = !slot.acted && o.attackTargets.length > 0;
+    const btn = (act, label, on, ok, title) => `<button class="ab-btn ${on ? 'on' : ''}" data-act="${act}" ${ok ? '' : 'disabled'} title="${esc(title)}">${label}</button>`;
+    const skills = o.abilities.filter(a => a.kind === 'active').map(a => {
+      if (ctx.abilityKey === a.key) return `<button class="ab-btn skill on" data-act="cancel" title="Cancel">✕ ${esc(a.name)}</button>`;
+      const why = a.cooldownLeft ? `${a.cooldownLeft}` : '';
+      return `<button class="ab-btn skill" data-act="ability" data-arg="${a.key}" ${a.ready ? '' : 'disabled'} title="${esc(a.name)}: ${esc(a.desc)}">${esc(a.name)}${why ? `<small>⟳${why}</small>` : ''}</button>`;
     }).join('');
-    let guide;
-    if (ctx.abilityKey) {
-      const ab = ABILITIES[ctx.abilityKey];
-      const what = { hex: 'a purple hex', enemy: 'a purple enemy', ally: 'a purple ally', self: 'yourself' }[ab.target.type];
-      guide = `<b>${esc(ab.name)}:</b> click ${what} to use it${ab.target.radius || ab.area ? '; orange shows what it hits' : ''}. Right-click or Esc to cancel.`;
-    } else if (slot.moved && slot.acted) guide = `<b>${esc(d.name)} is done.</b> Pick another unit${activationsLeft(game) ? '' : ' (none left)'} or End turn.`;
-    else {
-      const can = [!slot.moved && nReach ? '<b>move</b>' : '', !slot.acted && (nAtk || actives.some(a => a.ready && !a.usesMove)) ? '<b>attack or use an ability</b>' : ''].filter(Boolean);
-      guide = `<b>${esc(d.name)}</b> can ${can.join(' and ') || 'do nothing more'}${can.length === 2 ? ', in either order' : ''}${!slot.acted && !nAtk && !slot.moved ? ' (move closer to get an enemy in range)' : ''}. Picking another unit ends this one's activation.`;
-    }
-    el.innerHTML = head + `<div class="ab-row ab-unit">
-        ${step(1, 'Move', slot.moved, moveDetail)}${step(2, 'Action', slot.acted, actDetail)}
-        ${abButtons ? `<div class="ab-abs">${abButtons}</div>` : ''}</div>
-      <div class="ab-guide">${guide}</div>
-      ${legend(ctx.abilityKey ? [['target', 'ability target'], ['area', 'area hit']] : [['move', 'move'], ['risky', 'move through lava'], ['attack', 'attack'], ['ready', 'other units that can act']])}`;
+    el.innerHTML = `${turn}<span class="ab-sel">${esc(UNITS[sel.key].name)}</span>
+      ${btn('modeMove', 'Move', !ctx.abilityKey && ctx.mode === 'move', canMove, slot.moved ? 'Already moved this turn' : 'Show where it can move')}
+      ${btn('modeAttack', 'Attack', !ctx.abilityKey && ctx.mode === 'attack', canAttack, slot.acted ? 'Already acted this turn' : canAttack ? 'Show enemies in range' : 'No enemy in range')}
+      ${skills}${end}`;
   }
 
   // ---------- top bar ----------
@@ -223,7 +235,7 @@ export class UI {
     const el = $('side');
     this.setup = ctx.screen === 'setup';
     this.syncTray();
-    if (this.setup) { el.innerHTML = this.poolHtml(game, false, ctx); return; }
+    if (this.setup) { el.innerHTML = this.poolHtml(game); return; }
     const fn = { corners: this.cornersHtml, draft: this.draftHtml, placement: this.placementHtml, battle: this.battleHtml, over: this.battleHtml }[game.phase];
     // the handle only shows on phones (styles.css); a new phase starts folded so the board is visible
     if (this.sidePhase !== game.phase) { this.sidePhase = game.phase; el.classList.toggle('folded', game.phase === 'battle'); }
@@ -241,18 +253,33 @@ export class UI {
     $('poolTab').textContent = open ? 'Hide pool ▸' : '◂ Unit pool';
   }
 
-  poolHtml(game, pickable, ctx) {
-    return `<h2>Unit pool</h2><p class="muted" style="margin:0 0 8px;font-size:12px">${game.pool.length} units to draft from. Hover for details.</p>
-      <div class="pool">${game.pool.map(item => {
-        const d = UNITS[item.key];
-        const taken = item.takenBy !== null;
-        const owner = taken ? `<span class="owner dot" style="background:${game.players[item.takenBy].color}"></span>` : '';
-        return `<div class="card ${taken ? 'taken' : pickable ? 'pickable' : ''}" style="--accent:${d.color}"
-          ${!taken && pickable ? `data-act="draft" data-arg="${item.pid}"` : ''} data-peek="type:${item.key}">
-          ${owner}<div class="name">${esc(d.name)}</div><div class="role">${d.role}</div>
-          ${statsHtml(d)}
-          <div class="abil">${d.abilities.map(a => ABILITIES[a].name).join(' · ')}</div></div>`;
-      }).join('')}</div>`;
+  // Setup screen's pool tray: search, role filters and a portrait grid; hovering a tile shows its full card.
+  poolHtml(game) {
+    this.poolGame = game;
+    return `<h2>Unit pool</h2>
+      <div class="pt-filters">${Object.entries(FILTERS).map(([k, f]) => `<button data-pool-filter="${k}" class="${k === this.poolFilter ? 'on' : ''}">${f.name}</button>`).join('')}
+        <input data-pool-search placeholder="Search name or role" value="${esc(this.poolSearch)}"></div>
+      <div class="pt-grid" id="ptGrid">${this.poolGridHtml(game)}</div>`;
+  }
+
+  poolGridHtml(game) {
+    const f = FILTERS[this.poolFilter] ?? FILTERS.all, q = this.poolSearch.toLowerCase();
+    const items = game.pool.filter(it => {
+      const d = UNITS[it.key];
+      return f.test(d) && (!q || d.name.toLowerCase().includes(q) || d.role.toLowerCase().includes(q));
+    }).sort((a, b) => UNITS[b.key].cost - UNITS[a.key].cost || UNITS[a.key].name.localeCompare(UNITS[b.key].name));
+    return items.map(it => {
+      const d = UNITS[it.key], url = this.portraits?.[it.key];
+      const img = url ? `<img src="${url}" alt="" loading="lazy">` : `<span class="ph" style="background:${d.color}">${esc(d.name[0])}</span>`;
+      return `<div class="ds-tile ${it.takenBy !== null ? 'taken' : ''}" data-pool-key="${it.key}">${img}<span class="cost">${d.cost}</span><div class="nm">${esc(d.name)}</div></div>`;
+    }).join('') || '<p class="muted">No units match.</p>';
+  }
+
+  // portraits for the pool tray: { key: url } (main.js loads them at startup)
+  setPortraits(urls) {
+    this.portraits = urls;
+    const grid = $('ptGrid');
+    if (grid && this.poolGame) grid.innerHTML = this.poolGridHtml(this.poolGame);
   }
 
   cornersHtml(game, ctx) {
@@ -345,12 +372,13 @@ export class UI {
   }
 
   // Floating card next to the pointer (draft gallery).
-  showTip(html, x, y) {
+  // side 'left': the tip sits to the left of x (e.g. beside the pool tray on the right edge)
+  showTip(html, x, y, side = 'right') {
     const el = $('tip');
     el.innerHTML = html;
     el.classList.remove('hidden');
     const w = el.offsetWidth, h = el.offsetHeight;
-    el.style.left = `${Math.min(window.innerWidth - w - 8, x + 18)}px`;
+    el.style.left = `${side === 'left' ? Math.max(8, x - w - 12) : Math.min(window.innerWidth - w - 8, x + 18)}px`;
     el.style.top = `${Math.max(56, Math.min(window.innerHeight - h - 8, y - h / 2))}px`;
   }
   hideTip() { $('tip').classList.add('hidden'); }
@@ -406,8 +434,13 @@ export class UI {
     if (this.log.length > 120) this.log.shift();
   }
   clearLog() { this.log = []; }
+  // Folded by default to the latest line; the header opens the full log (this.logOpen, kept between renders).
   logHtml() {
-    return this.log.length ? `<h3>Battle log</h3><div class="log">${this.log.map(l => `<div>${l}</div>`).join('')}</div>` : '';
+    if (!this.log.length) return '';
+    return `<div class="log-tray ${this.logOpen ? 'open' : ''}">
+      <button class="log-toggle"><span>Battle log</span><small>${this.log.length}</small><i>${this.logOpen ? '▾' : '▸'}</i></button>
+      <div class="log-last">${this.log[this.log.length - 1]}</div>
+      <div class="log">${this.log.map(l => `<div>${l}</div>`).join('')}</div></div>`;
   }
   unitName(game, id) {
     const u = game.units[id];
@@ -422,6 +455,36 @@ export class UI {
   }
 
   // ---------- transient messages ----------
+  // The d20 roll for first pick (game.initiative.rounds; a tie rolls again). speed: 1 full, 0.4 quick, 0 skip.
+  // Resolves when done; a click skips it.
+  showInitiative(game, speed = 1) {
+    const rounds = game.initiative?.rounds ?? [];
+    if (!speed || !rounds.length) return Promise.resolve();
+    const el = document.createElement('div');
+    el.id = 'initiative';
+    $('hud').append(el);
+    let skip = false;
+    el.onclick = () => { skip = true; };
+    const sleep = ms => new Promise(r => setTimeout(r, skip ? 0 : ms * speed));
+    const die = (p, v, cls = '') => `<div class="d20 ${cls}" style="--pc:${game.players[p].color}"><b>${v}</b><span>${esc(game.players[p].name)}</span></div>`;
+    return (async () => {
+      for (let r = 0; r < rounds.length; r++) {
+        const rolls = rounds[r], last = r === rounds.length - 1;
+        const frame = (dice, note) => { el.innerHTML = `<div class="init-box"><h2>Roll for first pick</h2><div class="dice-row">${dice}</div><p>${note}</p><small>click to skip</small></div>`; };
+        for (let t = 0; t < 10 && !skip; t++) {
+          frame(rolls.map((_, p) => die(p, 1 + Math.floor(Math.random() * 20), 'spin')).join(''), 'Rolling…');
+          await sleep(70);
+        }
+        const top = Math.max(...rolls);
+        const winner = rolls.indexOf(top);
+        frame(rolls.map((v, p) => die(p, v, last && p === winner ? 'win' : '')).join(''),
+          last ? `<b style="color:${game.players[winner].color}">${esc(game.players[winner].name)}</b> picks the first corner` : 'Tie! Roll again');
+        await sleep(last ? 1400 : 800);
+      }
+      el.remove();
+    })();
+  }
+
   banner(text, color = '#fff') {
     const el = $('banner');
     el.textContent = text;
@@ -458,11 +521,12 @@ export class UI {
     m.innerHTML = `<div class="box"><h1>How to play</h1>
       <h3>Setup</h3><ul>
         <li>Generate a map you like. The board is a big hexagon with 6 possible start corners. Fair symmetry gives every start corner the same ground.</li>
-        <li><b>Corner draft</b>: the first player picks any start corner; everyone else starts evenly spaced from it (2 players: the opposite corner, 3 players: every other corner). The first to pick deploys first and takes the first turn; the others get the first unit picks.</li>
+        <li><b>Corner draft</b>: everyone rolls a <b>d20</b> (ties roll again); the highest picks any start corner first; everyone else starts evenly spaced from it (2 players: the opposite corner, 3 players: every other corner). The first to pick deploys first and takes the first turn; the others get the first unit picks.</li>
         <li><b>Unit draft</b>: the pool stands beside the board. Hover a unit for its stats and abilities; take turns picking (snake order).</li>
         <li><b>Deploy</b>: place your units in your corner zone.</li></ul>
       <h3>Your turn</h3><ul>
-        <li>Activate up to <b>2 different units</b>. Each can <b>move once</b> and <b>act once</b> (attack or an active ability), in either order. <b>Enter</b> ends your turn.</li>
+        <li>You have <b>4 actions</b> each turn. A <b>move</b>, an <b>attack</b> or a <b>skill</b> costs 1 action. Spread them over any of your units: each unit can move once and act once per turn, in either order. <b>Enter</b> ends your turn.</li>
+        <li>Click one of your units to see where it can move (the <b>Move</b> button); <b>Attack</b> shows enemies in range. Hover any unit for its stats and abilities.</li>
         <li><b>Moving</b> costs 1 per hex, plus 1 for each level up (a 2-level step costs 3). Some terrain costs more to enter. Drops of up to 3 levels cost nothing extra; bigger drops aren't allowed. Flyers ignore height and terrain.</li>
         <li>Entering a hex next to an enemy stops your move (engagement). You can walk through allies, not enemies.</li>
         <li>Ranged attacks need line of sight: forest and hexes 2+ levels above both units block it.</li></ul>

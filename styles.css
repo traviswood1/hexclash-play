@@ -69,6 +69,8 @@ h3 { margin: 12px 0 6px; font-size: 12px; text-transform: uppercase; letter-spac
 #side { top: 60px; right: 14px; width: 330px; max-height: calc(100% - 74px); overflow-y: auto; }
 #unitCard { left: 14px; bottom: 14px; width: 310px; max-height: calc(100% - 90px); overflow-y: auto; overflow-x: hidden; }
 #unitCard:empty { display: none; }
+/* narrower windows: lift the card clear of the bottom action bar */
+@media (max-width: 1250px) { #unitCard { bottom: 72px; max-height: calc(100% - 150px); } }
 
 .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
 .field label { font-size: 12px; color: var(--muted); }
@@ -138,6 +140,17 @@ h3 { margin: 12px 0 6px; font-size: 12px; text-transform: uppercase; letter-spac
 .status { font-size: 11px; padding: 1px 8px; border-radius: 99px; background: rgba(127,212,255,.15); color: #aee6ff; }
 
 /* log + dice */
+/* battle log tray: folded to the latest line until opened */
+.log-tray { margin-top: 10px; border-top: 1px solid var(--border); padding-top: 6px; }
+.log-toggle { width: 100%; display: flex; align-items: center; gap: 8px; padding: 4px 6px; background: none; border: 0; cursor: pointer;
+  font: 700 11px "Segoe UI", sans-serif; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); text-align: left; }
+.log-toggle span { flex: 1; }
+.log-toggle small { font-weight: 600; letter-spacing: 0; }
+.log-toggle:hover { color: var(--text); }
+.log-last { font-size: 12px; padding: 2px 6px 4px; color: var(--text); opacity: .85; }
+.log-tray .log { display: none; }
+.log-tray.open .log { display: flex; }
+.log-tray.open .log-last { display: none; }
 .log { max-height: 220px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
 .log div { padding: 3px 6px; border-radius: 6px; background: rgba(0,0,0,.2); }
 .die { display: inline-flex; width: 17px; height: 17px; align-items: center; justify-content: center; border-radius: 4px;
@@ -146,7 +159,7 @@ h3 { margin: 12px 0 6px; font-size: 12px; text-transform: uppercase; letter-spac
 .die.hit { background: #a52a2f; color: #f6e2b0; }
 .die.block { background: #2a5aa8; color: #f1f7ff; }
 
-#hexInfo { position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%); background: var(--panel); border: 1px solid var(--border);
+#hexInfo { position: absolute; bottom: 70px; left: 50%; transform: translateX(-50%); background: var(--panel); border: 1px solid var(--border);
   border-radius: 99px; padding: 5px 14px; font-size: 12px; white-space: nowrap; }
 #hexInfo:empty { display: none; }
 #banner { position: absolute; top: 34%; left: 0; right: 0; text-align: center; font: 700 42px Georgia, serif; letter-spacing: .04em;
@@ -192,7 +205,7 @@ h3 { margin: 12px 0 6px; font-size: 12px; text-transform: uppercase; letter-spac
 }
 
 /* ---------- dice tray ---------- */
-#dice { left: 50%; bottom: 48px; transform: translate(-50%, 30px); min-width: 460px; max-width: calc(100% - 24px); padding: 12px 16px;
+#dice { left: 50%; bottom: 74px; transform: translate(-50%, 30px); min-width: 460px; max-width: calc(100% - 24px); padding: 12px 16px;
   opacity: 0; pointer-events: none; transition: opacity .2s, transform .25s; z-index: 6; cursor: pointer; }
 #dice.show { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
 .tray-title { font-size: 13px; margin-bottom: 8px; text-align: center; }
@@ -338,42 +351,36 @@ h3 { margin: 12px 0 6px; font-size: 12px; text-transform: uppercase; letter-spac
 #poolTab { position: absolute; top: 50%; right: 0; transform: translateY(-50%) rotate(-90deg); transform-origin: 100% 100%;
   margin-top: -20px; border-radius: 10px 10px 0 0; border-bottom: none; background: var(--panel); color: var(--gold);
   font-weight: 600; padding: 7px 16px; transition: right .25s ease; white-space: nowrap; }
-#poolTab.open { right: 344px; }
+#poolTab.open { right: min(584px, calc(100% - 24px)); }
+#side.tray { width: min(560px, calc(100% - 28px)); }
+.pt-filters { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+.pt-filters button { padding: 5px 10px; font-size: 12px; }
+.pt-filters button.on { border-color: var(--gold); color: var(--gold); }
+.pt-filters input { flex: 1; min-width: 120px; }
+.pt-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; }
+.pt-grid .ds-tile { cursor: default; }
 #poolTab.hidden { display: none; }
 @media (max-width: 760px) { #poolTab { display: none; } }
 
 /* ---------- battle action bar: turn, activations, the selected unit's steps and options ---------- */
-#actionBar { top: 60px; left: 14px; right: 358px; padding: 8px 12px; display: flex; flex-direction: column; gap: 6px; z-index: 5; }
+/* battle action bar: one compact row along the bottom, so the board around the units stays visible */
+#actionBar { top: auto; bottom: 14px; left: 50%; transform: translateX(-50%); max-width: calc(100% - 28px); padding: 6px 8px;
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: center; z-index: 5; }
 #actionBar.hidden { display: none; }
-.ab-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.ab-gap { flex: 1; }
-.ab-big { font: 700 18px Georgia, serif; color: var(--gold); }
-.ab-turn { display: inline-flex; align-items: center; gap: 6px; font: 700 15px Georgia, serif; color: var(--pc); }
-.ab-pips { display: inline-flex; align-items: center; gap: 4px; }
+.ab-big { font: 700 18px Georgia, serif; color: var(--gold); padding: 0 6px; }
+.ab-turn { display: inline-flex; align-items: center; gap: 6px; font: 700 14px Georgia, serif; color: var(--pc); padding: 0 4px; }
+.ab-turn small { font: 600 11px "Segoe UI", sans-serif; color: var(--muted); }
+.ab-pips { display: inline-flex; align-items: center; gap: 4px; padding: 0 6px 0 2px; }
 .ab-pips i { width: 12px; height: 12px; border-radius: 50%; background: var(--gold); box-shadow: 0 0 6px rgba(232,189,87,.6); }
 .ab-pips i.used { background: rgba(255,255,255,.15); box-shadow: none; }
-.ab-pips small { margin-left: 6px; color: var(--muted); font-size: 12px; }
-.ab-guide { font-size: 13px; color: var(--text); }
-.ab-guide b { color: #fff; }
-.ab-chips { display: flex; gap: 6px; flex-wrap: wrap; }
-.ab-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; font-size: 12px; border-color: rgba(255,215,106,.5); }
-.ab-unit { gap: 8px; }
-.ab-step { display: flex; align-items: center; gap: 8px; padding: 4px 10px 4px 4px; border-radius: 10px; background: rgba(79,195,255,.08);
-  border: 1px solid rgba(79,195,255,.35); min-width: 150px; }
-.ab-step:nth-child(2) { background: rgba(255,77,77,.08); border-color: rgba(255,77,77,.35); }
-.ab-step .n { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 12px;
-  background: rgba(255,255,255,.12); flex: none; }
-.ab-step b { display: block; font-size: 13px; }
-.ab-step small { display: block; font-size: 11px; color: var(--muted); }
-.ab-step.done { opacity: .5; }
-.ab-step.done .n { background: var(--good); color: #0b1a10; }
-.ab-abs { display: flex; gap: 6px; flex-wrap: wrap; }
-.ab-ab { font-size: 12px; padding: 5px 10px; border-color: rgba(183,140,255,.5); }
-.ab-ab small { color: var(--muted); }
-.ab-ab.on { border-color: var(--magic); color: var(--magic); }
-.ab-legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 11px; color: var(--muted); }
-.ab-legend span { display: inline-flex; align-items: center; gap: 5px; }
-.ab-legend i { width: 12px; height: 12px; border-radius: 3px; display: inline-block; opacity: .85; }
+.ab-hint, .ab-wait { font-size: 13px; color: var(--muted); padding: 0 6px; display: inline-flex; align-items: center; }
+.ab-sel { font-size: 13px; font-weight: 600; color: #fff; padding: 0 4px; border-left: 1px solid var(--border); padding-left: 10px; }
+.ab-btn { font-size: 13px; padding: 6px 12px; }
+.ab-btn.on { border-color: var(--gold); color: var(--gold); box-shadow: 0 0 10px rgba(232,189,87,.25) inset; }
+.ab-btn.skill { border-color: rgba(183,140,255,.5); }
+.ab-btn.skill.on { border-color: var(--magic); color: var(--magic); }
+.ab-btn small { margin-left: 5px; color: var(--muted); }
+.ab-end { margin-left: 4px; }
 .ab-spin { display: inline-block; width: 12px; height: 12px; margin-right: 8px; border-radius: 50%; border: 2px solid var(--muted);
   border-top-color: var(--gold); animation: abSpin .8s linear infinite; vertical-align: -1px; }
 @keyframes abSpin { to { transform: rotate(360deg); } }
@@ -387,7 +394,22 @@ h3 { margin: 12px 0 6px; font-size: 12px; text-transform: uppercase; letter-spac
 .atk-tip .sw { color: #ff8a7a; } .atk-tip .sh { color: #8ac4ff; }
 .atk-tip .mods { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px; }
 @media (max-width: 760px) {
-  #actionBar { top: 52px; left: 8px; right: 8px; padding: 6px 8px; font-size: 12px; }
-  .ab-step { min-width: 0; }
-  .ab-legend { display: none; }
+  #actionBar { bottom: 128px; max-width: calc(100% - 16px); gap: 4px; padding: 5px 6px; } /* above the folded side panel */
+  .ab-btn { padding: 6px 9px; font-size: 12px; }
+  .ab-sel { display: none; }
 }
+
+/* first-pick d20 roll */
+#initiative { position: absolute; inset: 0; display: grid; place-items: center; z-index: 30; background: rgba(5,7,12,.45); cursor: pointer; }
+.init-box { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 26px; text-align: center; min-width: 280px; }
+.init-box h2 { margin: 0 0 12px; font: 700 20px Georgia, serif; color: var(--gold); }
+.init-box p { margin: 12px 0 4px; font-size: 15px; }
+.init-box small { color: var(--muted); font-size: 11px; }
+.dice-row { display: flex; gap: 22px; justify-content: center; }
+.d20 { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.d20 b { width: 70px; height: 70px; display: grid; place-items: center; font: 700 28px Georgia, serif; color: #fff;
+  clip-path: polygon(50% 0, 95% 25%, 95% 75%, 50% 100%, 5% 75%, 5% 25%);
+  background: linear-gradient(160deg, color-mix(in srgb, var(--pc) 85%, #fff), color-mix(in srgb, var(--pc) 55%, #000)); }
+.d20 span { font-size: 12px; color: var(--muted); }
+.d20.spin b { opacity: .8; transform: rotate(8deg); }
+.d20.win b { box-shadow: none; filter: drop-shadow(0 0 10px var(--pc)); transform: scale(1.12); transition: transform .2s; }

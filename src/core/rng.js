@@ -42,6 +42,10 @@ export function rollD6(holder) {
   return 1 + Math.floor(nextRandom(holder) * 6);
 }
 
+export function rollDie(holder, sides) {
+  return 1 + Math.floor(nextRandom(holder) * sides);
+}
+
 export function randomSeed() {
   const words = ['ash', 'brine', 'cinder', 'dusk', 'ember', 'frost', 'gale', 'hollow', 'iron', 'jade', 'kite',
     'loam', 'moss', 'nettle', 'onyx', 'pyre', 'quartz', 'rime', 'slate', 'thorn', 'umber', 'vale', 'wisp', 'yew'];

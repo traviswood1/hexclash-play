@@ -13,7 +13,7 @@
 // (settings.points; each unit has a cost in units.js), up to settings.teamSize units each. A player
 // who can't afford anything left, or has a full army, is skipped; the draft ends when nobody can buy.
 
-import { hashSeed, rollD6, createRng } from './rng.js';
+import { hashSeed, rollD6, rollDie, createRng } from './rng.js';
 import { generateMap, CORNERS } from './mapgen.js';
 import { UNITS, DRAFTABLE, SUMMONS } from './units.js';
 import { ABILITIES, validTargets } from './abilities.js';
@@ -22,7 +22,7 @@ import { key, distance } from './hex.js';
 
 export const PLAYER_COLORS = ['#3d8bff', '#ff4d4d', '#3ccf6e', '#f2c230'];
 export const PLAYER_NAMES = ['Blue', 'Red', 'Green', 'Gold'];
-export const ACTIVATIONS_PER_TURN = 2; // different units a player may move/act with each turn
+export const ACTIONS_PER_TURN = 4; // a move, an attack or a skill each costs 1; every unit can move once and act once per turn
 
 export function createGame(opts = {}) {
   const settings = {
@@ -31,7 +31,7 @@ export function createGame(opts = {}) {
   };
   const { seed, players, teamSize } = settings;
   const map = generateMap({ ...settings, zoneSize: teamSize + 4 });
-  return {
+  const state = {
     v: 1,
     settings,
     map,
@@ -50,6 +50,21 @@ export function createGame(opts = {}) {
     round: 0,
     winner: null,
   };
+  rollInitiative(state);
+  return state;
+}
+
+// Everyone rolls a d20 (all roll again on any tie); the highest picks the first corner, and the
+// corner picks go down from there. state.initiative.rounds lists every roll, for the dice animation.
+function rollInitiative(state) {
+  const n = state.players.length, rounds = [];
+  let rolls;
+  do {
+    rolls = Array.from({ length: n }, () => rollDie(state, 20));
+    rounds.push(rolls);
+  } while (new Set(rolls).size < n);
+  state.queue = [...state.queue].sort((a, b) => rolls[b] - rolls[a]);
+  state.initiative = { rounds };
 }
 
 // Every unit type is always in the pool. Only when the players need more units than there are
@@ -99,22 +114,21 @@ export const liveUnitsOf = (state, p) => playerUnits(state, p).filter(u => u.ali
 
 // What a unit has already done this turn.
 export function slotOf(state, unit) {
-  const t = state.turn;
-  return t?.active === unit.id ? { moved: t.moved, acted: t.acted, movedDistance: t.movedDistance }
-    : { moved: false, acted: false, movedDistance: 0 };
+  return state.turn?.units?.[unit.id] ?? { moved: false, acted: false, movedDistance: 0 };
 }
 
-// Activations still available this turn, counting the active unit's if it has done something.
-export function activationsLeft(state) {
+// Actions the player has left this turn (out of state.turn.actions).
+export function actionsLeft(state) {
   const t = state.turn;
-  return t.limit - t.done.length - (t.moved || t.acted ? 1 : 0);
+  return t ? t.actions - t.used : 0;
 }
 
+// Can this unit still do something this turn: actions left, and it hasn't both moved and acted.
 export function canActivate(state, unit) {
   if (state.phase !== 'battle' || !unit?.alive || unit.owner !== state.turn.player) return false;
-  const t = state.turn;
-  if (t.done.includes(unit.id) || t.fresh?.includes(unit.id)) return false; // fresh: raised this turn
-  return t.active === unit.id || activationsLeft(state) > 0;
+  if (state.turn.fresh?.includes(unit.id)) return false; // raised this turn
+  const s = slotOf(state, unit);
+  return actionsLeft(state) > 0 && !(s.moved && s.acted);
 }
 
 // Everything the UI needs to show for a selected unit.
@@ -351,20 +365,16 @@ function activatable(state, player, unitId) {
   if (state.phase !== 'battle') fail('Not in battle.');
   const unit = state.units[unitId];
   if (!unit || !unit.alive || unit.owner !== player) fail('Not your unit.');
-  if (state.turn.done.includes(unit.id)) fail('That unit already finished this turn.');
   if (state.turn.fresh?.includes(unit.id)) fail('It was just raised: it can act from your next turn.');
-  if (!canActivate(state, unit)) fail(`You can only activate ${state.turn.limit} units per turn.`);
+  if (actionsLeft(state) <= 0) fail('No actions left this turn. End your turn.');
   return unit;
 }
 
-// Make `unit` the active one (finishing the previous active unit if it did anything), then record what it did.
+// Spend one of the turn's actions on `unit` and record what it did.
 function commit(state, unit, changes) {
   const t = state.turn;
-  if (t.active !== unit.id) {
-    if (t.active && (t.moved || t.acted)) t.done.push(t.active);
-    Object.assign(t, { active: unit.id, moved: false, acted: false, movedDistance: 0 });
-  }
-  Object.assign(t, changes);
+  t.units[unit.id] = { ...slotOf(state, unit), ...changes };
+  t.used++;
 }
 
 // Move the draft on to the next player who can still buy something; end it when nobody can.
@@ -390,8 +400,7 @@ function addUnit(state, key, owner) {
 
 
 function startTurn(state, player, emit) {
-  const limit = Math.min(ACTIVATIONS_PER_TURN, liveUnitsOf(state, player).length);
-  state.turn = { player, active: null, moved: false, acted: false, movedDistance: 0, done: [], limit };
+  state.turn = { player, actions: ACTIONS_PER_TURN, used: 0, units: {} }; // units: id -> { moved, acted, movedDistance }
   emit({ type: 'turn', player, round: state.round });
   for (const u of liveUnitsOf(state, player)) {
     delete u.status.braced;

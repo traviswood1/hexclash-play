@@ -12,8 +12,8 @@ import { playerUnits, pointsLeft } from '../core/game.js';
 const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
-// Filter tabs over the pool
-const FILTERS = {
+// Filter tabs over the pool (also used by the setup screen's pool tray)
+export const FILTERS = {
   all: { name: 'All', test: () => true },
   melee: { name: 'Melee', test: d => d.range === 1 && !d.abilities.includes('flight') },
   ranged: { name: 'Ranged', test: d => d.range > 1 },

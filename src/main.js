@@ -7,7 +7,7 @@ import { DraftGallery } from './render/gallery.js';
 import { createEnvironment, loadTable, THEMES } from './render/environment.js';
 import { initFx, updateFx, floatText, burst, rise, zap, wait, tween } from './render/fx.js';
 import { loadManifest, preloadUnits } from './render/loader.js';
-import { createGame, dispatch, currentPlayer, unitOptions, canActivate, playerUnits, allowedCorners } from './core/game.js';
+import { createGame, dispatch, currentPlayer, unitOptions, canActivate, playerUnits, allowedCorners, slotOf } from './core/game.js';
 import { aiAction } from './core/ai.js';
 import { ABILITIES, abilityArea } from './core/abilities.js';
 import { UNITS, DRAFTABLE } from './core/units.js';
@@ -60,7 +60,7 @@ const gallery = new DraftGallery(view.scene, manifest, { camera: view.camera, ca
 let game = null;
 let busy = false;
 let aiTimer = null;
-const ctx = { screen: 'setup', selectedId: null, inspectId: null, abilityKey: null, placingId: null, hoverKey: null, hoverUnit: null, peek: null };
+const ctx = { screen: 'setup', selectedId: null, inspectId: null, abilityKey: null, mode: 'move', placingId: null, hoverKey: null, hoverUnit: null, peek: null };
 
 const ui = new UI({
   setting(name, value) {
@@ -101,6 +101,8 @@ const ui = new UI({
     focus(u.id);
   },
   ability: useAbility,
+  modeMove: () => setMode('move'),
+  modeAttack: () => setMode('attack'),
   cancel,
   endTurn: () => act({ type: 'endTurn', player: currentPlayer(game) }),
   peek(what) { if (ctx.peek !== what) { ctx.peek = what; renderCard(); } },
@@ -153,13 +155,21 @@ function showGallery(on, focus = 'both') {
   view.frame(f.maxX - f.minX, f.maxZ - f.minZ, (f.minX + f.maxX) / 2, (f.minZ + f.maxZ) / 2, both);
 }
 
-function start() {
+// Both players roll a d20 (createGame already rolled it, seeded); the higher picks the first corner.
+async function start() {
   ctx.screen = 'game';
   showGallery(true, 'board');
+  const rounds = game.initiative?.rounds ?? [];
+  const final = rounds[rounds.length - 1] ?? [];
+  busy = true; // no corner picks while the dice roll
+  refresh();
+  try { await ui.showInitiative(game, { full: 1, quick: 0.4, off: 0 }[settings.dice] ?? 1); } finally { busy = false; }
+  if (final.length) ui.addLog(`First pick roll (d20): ${final.map((v, p) => `${pname(p)} ${v}`).join(', ')}${rounds.length > 1 ? ' (after a tie)' : ''}.`);
   ui.addLog('Pick your starting corners.');
   ui.banner('Choose a corner', '#e8bd57');
   refresh();
   maybeAI();
+  pumpRemote(); // online: a fast friend's corner pick may have arrived during the roll
 }
 
 // Is it this screen's turn to act? (Not the CPU's, and online not the friend's.)
@@ -198,9 +208,11 @@ function afterAction() {
   if (sel) {
     const o = game.phase === 'battle' && canActivate(game, sel) ? unitOptions(game, sel) : null;
     if (!o || !isHuman() || (!o.canMove && !o.canAct)) ctx.selectedId = null;
+    else ctx.mode = defaultMode(sel); // after moving, show who it can attack
   }
   if (ctx.inspectId && !game.units[ctx.inspectId]?.alive) ctx.inspectId = null;
   ctx.abilityKey = null;
+  tipUnit = null; // units may have moved or changed: the next hover redraws the pop-up
   if (game.phase === 'placement') {
     const p = currentPlayer(game);
     const placing = game.units[ctx.placingId];
@@ -404,8 +416,18 @@ async function abilityFx(e) {
 
 // ---------- selection & abilities ----------
 
+// Selecting a unit shows where it can move (or, once it has moved, who it can attack).
 function select(id) {
-  Object.assign(ctx, { selectedId: id, inspectId: null, abilityKey: null });
+  Object.assign(ctx, { selectedId: id, inspectId: null, abilityKey: null, mode: defaultMode(game.units[id]) });
+  refresh();
+}
+function defaultMode(u) {
+  const slot = slotOf(game, u);
+  return slot.moved && !slot.acted ? 'attack' : 'move';
+}
+function setMode(mode) {
+  if (!ctx.selectedId) return;
+  Object.assign(ctx, { mode, abilityKey: null });
   refresh();
 }
 function inspect(id) {
@@ -513,8 +535,7 @@ function renderCard() {
   const sel = ctx.selectedId && game.units[ctx.selectedId];
   if (sel) what = { unit: sel, options: isHuman() && canActivate(game, sel) ? unitOptions(game, sel) : null, abilityKey: ctx.abilityKey };
   else if (ctx.inspectId) what = { unit: game.units[ctx.inspectId] };
-  else if (ctx.hoverUnit && game.units[ctx.hoverUnit]?.alive) what = { unit: game.units[ctx.hoverUnit] };
-  else if (ctx.peek) {
+  else if (ctx.peek) { // hovered units get a pop-up beside them instead (unitHover)
     const [kind, v] = ctx.peek.split(':');
     what = kind === 'type' ? { type: v } : { unit: game.units[+v] };
   }
@@ -547,9 +568,11 @@ function refreshHighlights() {
         if (hovered !== undefined && hovered !== null && ab.targets.includes(hovered)) {
           abilityArea(game, ctx.abilityKey, hovered, sel).forEach(k => items.push({ key: k, color: COLORS.area, strong: true }));
         }
+      } else if (ctx.mode === 'attack') {
+        o.attackTargets.forEach(id => items.push({ key: unitKey(game.units[id]), color: COLORS.attack, strong: true }));
       } else {
         Object.keys(o.reach).forEach(k => items.push({ key: k, color: o.reach[k].hazard ? COLORS.risky : COLORS.move }));
-        o.attackTargets.forEach(id => items.push({ key: unitKey(game.units[id]), color: COLORS.attack, strong: true }));
+        o.attackTargets.forEach(id => items.push({ key: unitKey(game.units[id]), color: COLORS.attack })); // can still click them
       }
       readyUnits(sel.id).forEach(u => items.push({ key: unitKey(u), color: COLORS.ready }));
       items.push({ key: unitKey(sel), color: '#ffffff' });
@@ -641,7 +664,9 @@ canvas.addEventListener('pointermove', ev => {
 function hoverAt(ev) {
   const { key: k, unitId, pid } = pickAt(ev);
   const attack = attackPreview(unitId, ev);
-  if (!attack) galleryHover(pid ?? null, ev);
+  if (attack) tipUnit = null;
+  else if (pid !== undefined && pid !== null) { tipUnit = null; galleryHover(pid, ev); }
+  else if (!unitHover(unitId)) galleryHover(null, ev);
   const shown = attack ? 'attack' : pid !== undefined && pid !== null ? 'pool' : null;
   if (k === ctx.hoverKey && unitId === ctx.hoverUnit) return shown;
   ctx.hoverKey = k;
@@ -656,10 +681,24 @@ function hoverAt(ev) {
 
 canvas.addEventListener('pointerleave', () => galleryHover(null));
 
+// Hovering a unit on the board shows its card (stats, abilities, statuses) beside it.
+let tipUnit = null;
+function unitHover(unitId) {
+  const u = unitId && game.units[unitId];
+  if (!u?.alive || !['placement', 'battle', 'over'].includes(game.phase)) return false;
+  if (tipUnit === unitId && !document.getElementById('tip').classList.contains('hidden')) return true;
+  tipUnit = unitId;
+  const p = units.center(unitId);
+  if (!p) return false;
+  const r = canvas.getBoundingClientRect(), s = p.project(view.camera);
+  ui.showTip(ui.unitCardHtml(game, { unit: u }), r.left + (s.x + 1) / 2 * r.width + 20, r.top + (1 - s.y) / 2 * r.height);
+  return true;
+}
+
 // Hovering a unit in the draft gallery shows its full card beside the pointer.
 function galleryHover(pid, ev) {
   if (pid !== gallery.hovered) gallery.setHover(pid);
-  if (pid === null) { ui.hideTip(); return; }
+  if (pid === null) { tipUnit = null; ui.hideTip(); return; }
   const item = game.pool.find(p => p.pid === pid);
   const footer = game.phase === 'draft' && isHuman() ? (ev.pointerType === 'mouse' ? 'Click to draft' : 'Tap again to draft') : '';
   // place it just right of the gallery so it doesn't cover the other units
@@ -699,23 +738,27 @@ function startDraft() {
   draft.ends = performance.now() + DRAFT_PREVIEW * 1000;
   showGallery(true, 'board'); // the map framed, the pool's table beside it
   previewBar.classList.remove('hidden');
-  if (!draft.portraits) {
-    draft.portraits = {};
-    // stylized art (assets/portraits/<key>.png, listed in index.json) is used where it exists; only the
-    // rest get a live 3D render. The web build lists { ext: 'webp', keys } instead of a plain key list.
-    (async () => {
-      const art = {};
-      try {
-        const index = await (await fetch('assets/portraits/index.json')).json();
-        const ext = index.ext ?? 'png';
-        for (const k of index.keys ?? index) if (DRAFTABLE.includes(k)) art[k] = `assets/portraits/${k}.${ext}`;
-      } catch { /* no stylized portraits yet */ }
-      const missing = DRAFTABLE.filter(k => !art[k]);
-      const urls = { ...(missing.length ? await renderPortraits(view.renderer, missing, manifest) : {}), ...art };
-      draft.portraits = urls;
-      draftScreen.setPortraits(urls);
-    })();
-  }
+  loadPortraits();
+}
+
+// Unit portraits for the draft screen and the pool tray: stylized art (assets/portraits/<key>.png, listed
+// in index.json) where it exists, a live 3D render for the rest. The web build lists { ext: 'webp', keys }.
+function loadPortraits() {
+  if (draft.portraits) return;
+  draft.portraits = {};
+  (async () => {
+    const art = {};
+    try {
+      const index = await (await fetch('assets/portraits/index.json')).json();
+      const ext = index.ext ?? 'png';
+      for (const k of index.keys ?? index) if (DRAFTABLE.includes(k)) art[k] = `assets/portraits/${k}.${ext}`;
+    } catch { /* no stylized portraits yet */ }
+    const missing = DRAFTABLE.filter(k => !art[k]);
+    const urls = { ...(missing.length ? await renderPortraits(view.renderer, missing, manifest) : {}), ...art };
+    draft.portraits = urls;
+    draftScreen.setPortraits(urls);
+    ui.setPortraits(urls);
+  })();
 }
 
 function openDraftScreen() {
@@ -765,7 +808,7 @@ function draftTick() {
 // Each side sends its own actions; the other side applies them through act(..., { remote }).
 // Messages: hello (guest's version) · config (host's settings) · start · action · newGame · full
 
-const NET_VERSION = 2; // bump when the rules or the message format change, so mismatched builds don't play
+const NET_VERSION = 3; // bump when the rules or the message format change, so mismatched builds don't play
 const online = { state: 'idle', role: null, code: null, me: null, config: null, joinCode: '', error: null, queue: [], warned: false };
 const net = new RelayLink({
   onOpen() {
@@ -927,6 +970,7 @@ view.renderer.setAnimationLoop(() => tick(true));
 setInterval(() => { if (performance.now() - lastFrame > 250) tick(false); }, 100);
 
 preview();
+loadPortraits(); // the pool tray shows them on the setup screen
 document.getElementById('loading').remove();
 
 // Debug handle for the browser console: __hex.game is the live state.
