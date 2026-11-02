@@ -32,6 +32,12 @@ export class UI {
     $('hud').addEventListener('change', e => {
       if (e.target.dataset.setting) this.h.setting(e.target.dataset.setting, e.target.value);
     });
+    // Enter in the room-code box joins
+    $('hud').addEventListener('keydown', e => {
+      if (e.key !== 'Enter' || e.target.dataset.setting !== 'joinCode') return;
+      this.h.setting('joinCode', e.target.value);
+      this.h.joinOnline();
+    });
     $('hud').addEventListener('mouseover', e => {
       const el = e.target.closest('[data-peek]');
       if (el) this.h.peek(el.dataset.peek);

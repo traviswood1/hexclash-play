@@ -14,7 +14,7 @@ import { UNITS, DRAFTABLE } from './core/units.js';
 import { CORNERS, CORNER_NAMES, SYMMETRY, MAP_SIZES, BIOMES } from './core/mapgen.js';
 import { unitAt, unitKey, reachable, COMBAT, attackDice, defenseDice, damageOdds, has } from './core/rules.js';
 import { randomSeed, hashSeed } from './core/rng.js';
-import { PeerLink, normalizeCode } from './net/peer.js';
+import { RelayLink, normalizeCode } from './net/relay.js';
 import { UI, HIGHLIGHT } from './ui/ui.js';
 import { DiceTray, DICE_MODES } from './ui/dice.js';
 import { DraftScreen } from './ui/draftScreen.js';
@@ -760,14 +760,14 @@ function draftTick() {
   act({ type: 'draft', player: p, pid: ok ? item.pid : aiAction(game).pid });
 }
 
-// ---------- online play (two browsers, peer to peer) ----------
+// ---------- online play (two browsers, through a public message relay: src/net/relay.js) ----------
 // The host (Blue) picks the match settings and starts; the guest (Red) joins with the room code.
 // Each side sends its own actions; the other side applies them through act(..., { remote }).
 // Messages: hello (guest's version) · config (host's settings) · start · action · newGame · full
 
 const NET_VERSION = 2; // bump when the rules or the message format change, so mismatched builds don't play
 const online = { state: 'idle', role: null, code: null, me: null, config: null, joinCode: '', error: null, queue: [], warned: false };
-const net = new PeerLink({
+const net = new RelayLink({
   onOpen() {
     online.state = 'connected';
     if (online.role === 'guest') net.send({ t: 'hello', v: NET_VERSION });
@@ -783,6 +783,7 @@ const net = new PeerLink({
   },
   onError(e) { console.warn('[online]', e.type ?? e.message); },
 });
+addEventListener('pagehide', () => { if (net.connected) net.close(); }); // tell the friend straight away
 
 const onlineGame = () => settings.opponent === 'online' && net.connected;
 const draftSeconds = () => matchConfig().draftTimer;
