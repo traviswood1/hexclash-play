@@ -3,7 +3,7 @@
 // - assets/ (models, textures, portraits) are cached as they load and served from the cache straight away,
 //   refreshed in the background (stale-while-revalidate), so the game works offline after one visit
 //   and big files aren't downloaded again on every deploy.
-const VERSION = '2026-11-02T12:48:58.711Z';
+const VERSION = '2026-11-02T12:58:36.812Z';
 const SHELL = ["./","icons/icon-192.png","icons/icon-512.png","icons/icon-maskable-512.png","index.html","manifest.webmanifest","src/core/abilities.js","src/core/ai.js","src/core/game.js","src/core/hex.js","src/core/mapgen.js","src/core/rng.js","src/core/rules.js","src/core/terrain.js","src/core/units.js","src/main.js","src/net/relay.js","src/posePicker.js","src/render/animator.js","src/render/attackFx.js","src/render/board.js","src/render/environment.js","src/render/flight.js","src/render/fx.js","src/render/gallery.js","src/render/loader.js","src/render/pedestal.js","src/render/portraits.js","src/render/skillFx.js","src/render/terrainTextures.js","src/render/unitsView.js","src/render/view.js","src/ui/dice.js","src/ui/draftScreen.js","src/ui/icons.js","src/ui/ui.js","styles.css","vendor/mqtt.esm.js","vendor/three/build/three.module.js","vendor/three/examples/jsm/controls/OrbitControls.js","vendor/three/examples/jsm/environments/RoomEnvironment.js","vendor/three/examples/jsm/libs/meshopt_decoder.module.js","vendor/three/examples/jsm/loaders/GLTFLoader.js","vendor/three/examples/jsm/utils/BufferGeometryUtils.js","vendor/three/examples/jsm/utils/SkeletonUtils.js"];
 const SHELL_CACHE = `hexclash-shell-${VERSION}`;
 const ASSET_CACHE = 'hexclash-assets';

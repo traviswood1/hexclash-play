@@ -846,7 +846,7 @@ function draftTick() {
 // Each side sends its own actions; the other side applies them through act(..., { remote }).
 // Messages: hello (guest's version) · config (host's settings) · start · action · newGame · full
 
-const NET_VERSION = 4; // bump when the rules or the message format change, so mismatched builds don't play
+const NET_VERSION = 5; // bump when the rules or the message format change, so mismatched builds don't play
 const online = { state: 'idle', role: null, code: null, me: null, config: null, joinCode: '', error: null, queue: [], warned: false };
 const net = new RelayLink({
   onOpen() {

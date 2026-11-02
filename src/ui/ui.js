@@ -209,7 +209,7 @@ export class UI {
     const head = plan.ok ? `<b>Move ${plan.cost} / ${plan.budget}</b>` : `<b class="no">Can't move here</b>`;
     return `<div class="mv-tip">${head}${plan.steps.length ? `<div class="mv-steps">${steps}</div>` : ''}
       ${plan.reason ? `<div class="muted">${esc(plan.reason)}</div>` : ''}
-      ${plan.ok && plan.engaged ? '<div class="muted">Stops next to an enemy: entering a hex beside an enemy ends a move.</div>' : ''}</div>`;
+</div>`;
   }
 
   // A message box with an OK button.
@@ -236,16 +236,19 @@ export class UI {
     }
     const t = game.turn, pl = game.players[t.player], left = actionsLeft(game);
     const pips = Array.from({ length: t.actions }, (_, i) => `<i class="${i < left ? '' : 'used'}"></i>`).join('');
-    const turn = `<span class="ab-turn" style="--pc:${pl.color}"><span class="dot" style="background:${pl.color}"></span>${esc(pl.name)}<small>R${game.round}</small></span>
-      <span class="ab-pips" title="Actions left this turn: a move, an attack or a skill costs 1. Units can move again and again, but attack once per turn.">${pips}</span>`;
+    // three centred lines: turn + actions left / selected unit + statuses / its options
+    const line = (html, cls = '') => `<div class="ab-line ${cls}">${html}</div>`;
+    const turn = line(`<span class="ab-turn" style="--pc:${pl.color}"><span class="dot" style="background:${pl.color}"></span>${esc(pl.name)}</span>
+      <span class="ab-round">Round ${game.round}</span>
+      <span class="ab-pips" title="Actions left this turn: a move, an attack or a skill costs 1. Units can move again and again, but attack once per turn.">${pips}</span>`, 'ab-top');
     const end = ctx.human ? `<button class="primary ab-end" data-act="endTurn" ${ctx.busy ? 'disabled' : ''} title="End turn (Enter)">End turn</button>` : '';
     if (!ctx.human) {
-      el.innerHTML = `${turn}<span class="ab-wait"><span class="ab-spin"></span>${pl.ai ? 'Thinking…' : 'Their turn…'}</span>`;
+      el.innerHTML = turn + line(`<span class="ab-wait"><span class="ab-spin"></span>${pl.ai ? 'Thinking…' : 'Their turn…'}</span>`);
       return;
     }
     const sel = ctx.selectedId && game.units[ctx.selectedId];
     if (!sel || !canActivate(game, sel)) {
-      el.innerHTML = `${turn}<span class="ab-hint">${left ? 'Pick a unit' : 'No actions left'}</span>${end}`;
+      el.innerHTML = turn + line(`<span class="ab-hint">${left ? 'Pick a unit' : 'No actions left'}</span>${end}`);
       return;
     }
     const o = unitOptions(game, sel), slot = slotOf(game, sel);
@@ -259,10 +262,11 @@ export class UI {
     }).join('');
     const statuses = Object.keys(sel.status).filter(k => STATUS_INFO[k]).map(k =>
       `<span class="ab-status" data-status="${k}">${STATUS_INFO[k].icon} ${esc(statusLabel(sel, k))}</span>`).join('');
-    el.innerHTML = `${turn}<span class="ab-sel">${esc(UNITS[sel.key].name)}</span>${statuses}
-      ${btn('modeMove', 'Move', !ctx.abilityKey && ctx.mode === 'move', canMove, canMove ? `Show where it can move${slot.moved ? ' (again, 1 action)' : ''}` : 'Nowhere to move')}
+    el.innerHTML = turn
+      + line(`<span class="ab-sel">${esc(UNITS[sel.key].name)}</span>${statuses}`, 'ab-unit')
+      + line(`${btn('modeMove', 'Move', !ctx.abilityKey && ctx.mode === 'move', canMove, canMove ? `Show where it can move${slot.moved ? ' (again, 1 action)' : ''}` : 'Nowhere to move')}
       ${btn('modeAttack', 'Attack', !ctx.abilityKey && ctx.mode === 'attack', !slot.acted, slot.acted ? 'Already attacked this turn' : canAttack ? 'Show range and enemies you can hit' : 'Show range (no enemy in range yet)')}
-      ${skills}${end}`;
+      ${skills}${end}`);
   }
 
   // ---------- top bar ----------
@@ -582,7 +586,7 @@ export class UI {
         <li>You have <b>4 actions</b> each turn. A <b>move</b>, an <b>attack</b> or a <b>skill</b> costs 1 action. Spread them over any of your units: a unit can move as many times as you have actions, but attacks or uses an action skill only once per turn. <b>Enter</b> ends your turn.</li>
         <li>Click one of your units to see where it can move (the <b>Move</b> button); hover a hex for the move cost. <b>Attack</b> shows its range; for ranged units, hover a hex to see the line of sight (green clear, red blocked). Hover any unit for its stats and abilities.</li>
         <li><b>Moving</b> costs 1 per hex, plus 1 for each level up (a 2-level step costs 3). Some terrain costs more to enter. Drops of up to 3 levels cost nothing extra; bigger drops aren't allowed. Flyers ignore height and terrain.</li>
-        <li>Entering a hex next to an enemy stops your move (engagement). You can walk through allies, not enemies.</li>
+        <li>You can walk through allies, not enemies.</li>
         <li>Ranged attacks need line of sight: forest and hexes 2+ levels above both units block it.</li></ul>
       <h3>Combat</h3><ul>
         <li>Roll attack dice: each <b>sword</b> is a hit (${7 - COMBAT.HIT} of 6 faces). The defender rolls defense dice: each <b>shield</b> blocks one hit (${7 - COMBAT.BLOCK} of 6 faces). Blank faces do nothing. Damage = hits − blocks.</li>

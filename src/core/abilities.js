@@ -87,7 +87,7 @@ export const ABILITIES = {
   arcaneWard:   { name: 'Arcane Ward',  kind: 'passive', desc: '+1 defense die against ranged attacks and spells.' },
   rally:        { name: 'Rally',        kind: 'passive', desc: 'Allies within 2 hexes get +1 attack die.' },
   blessing:     { name: 'Blessing',     kind: 'passive', desc: 'Adjacent allies get +1 defense die.' },
-  flight:       { name: 'Flight',       kind: 'passive', desc: 'Flies: ignores terrain cost, height and engagement, and can pass over units.' },
+  flight:       { name: 'Flight',       kind: 'passive', desc: 'Flies: ignores terrain cost and height, and can pass over units.' },
   dive:         { name: 'Dive',         kind: 'passive', desc: '+2 attack dice against a target 2 or more levels below.' },
   regenerate:   { name: 'Regenerate',   kind: 'passive', desc: 'Heals 1 at the start of your turn.' },
   swimmer:      { name: 'Swimmer',      kind: 'passive', desc: 'Water costs 1 to enter and gives +1 defense die instead of -1.' },
@@ -98,7 +98,7 @@ export const ABILITIES = {
   regenAura:    { name: 'Repair Field', kind: 'passive', desc: 'Allies within 2 heal 1 at the start of your turn.' },
   deflect:      { name: 'Deflect',      kind: 'passive', desc: 'Ranged attacks and spells against this unit roll 2 fewer attack dice.' },
   speedAura:    { name: 'Tempo Beat',   kind: 'passive', desc: 'Allies within 2 get +1 move.' },
-  phaseShift:   { name: 'Phase Shift',  kind: 'passive', desc: 'Ignores engagement and can move through enemies (but not stop on them).' },
+  phaseShift:   { name: 'Phase Shift',  kind: 'passive', desc: 'Can move through enemies (but not stop on them).' },
 
   // ---------- actives ----------
   brace: {
@@ -332,7 +332,7 @@ export const ABILITIES = {
   },
   voidFlash: {
     name: 'Void Flash Step', kind: 'active', cooldown: 3, signature: true,
-    desc: 'Vanishes and reappears behind an enemy within 4, striking with 5 attack dice. Ignores line of sight and engagement.',
+    desc: 'Vanishes and reappears behind an enemy within 4, striking with 5 attack dice. Ignores line of sight.',
     target: { type: 'enemy', range: 4, sight: false },
     usableOn: (target, state) => !!behind(state, target),
     resolve: ({ state, unit, target, api }) => {

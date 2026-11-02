@@ -70,7 +70,7 @@ h3 { margin: 12px 0 6px; font-size: 12px; text-transform: uppercase; letter-spac
 #unitCard { left: 14px; bottom: 14px; width: 310px; max-height: calc(100% - 90px); overflow-y: auto; overflow-x: hidden; }
 #unitCard:empty { display: none; }
 /* narrower windows: lift the card clear of the bottom action bar */
-@media (max-width: 1250px) { #unitCard { bottom: 72px; max-height: calc(100% - 150px); } }
+@media (max-width: 1250px) { #unitCard { bottom: 130px; max-height: calc(100% - 200px); } }
 
 .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
 .field label { font-size: 12px; color: var(--muted); }
@@ -159,7 +159,7 @@ h3 { margin: 12px 0 6px; font-size: 12px; text-transform: uppercase; letter-spac
 .die.hit { background: #a52a2f; color: #f6e2b0; }
 .die.block { background: #2a5aa8; color: #f1f7ff; }
 
-#hexInfo { position: absolute; bottom: 70px; left: 50%; transform: translateX(-50%); background: var(--panel); border: 1px solid var(--border);
+#hexInfo { position: absolute; bottom: 128px; left: 50%; transform: translateX(-50%); background: var(--panel); border: 1px solid var(--border);
   border-radius: 99px; padding: 5px 14px; font-size: 12px; white-space: nowrap; }
 #hexInfo:empty { display: none; }
 #callout { position: absolute; top: 34%; left: 0; right: 0; text-align: center; font: 700 42px Georgia, serif; letter-spacing: .04em;
@@ -205,7 +205,7 @@ h3 { margin: 12px 0 6px; font-size: 12px; text-transform: uppercase; letter-spac
 }
 
 /* ---------- dice tray ---------- */
-#dice { left: 50%; bottom: 74px; transform: translate(-50%, 30px); min-width: 460px; max-width: calc(100% - 24px); padding: 12px 16px;
+#dice { left: 50%; bottom: 132px; transform: translate(-50%, 30px); min-width: 460px; max-width: calc(100% - 24px); padding: 12px 16px;
   opacity: 0; pointer-events: none; transition: opacity .2s, transform .25s; z-index: 6; cursor: pointer; }
 #dice.show { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
 .tray-title { font-size: 13px; margin-bottom: 8px; text-align: center; }
@@ -367,8 +367,11 @@ h3 { margin: 12px 0 6px; font-size: 12px; text-transform: uppercase; letter-spac
 
 /* ---------- battle action bar: turn, activations, the selected unit's steps and options ---------- */
 /* battle action bar: one compact row along the bottom, so the board around the units stays visible */
-#actionBar { top: auto; bottom: 14px; left: 50%; transform: translateX(-50%); max-width: calc(100% - 28px); padding: 6px 8px;
-  display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: center; z-index: 5; }
+#actionBar { top: auto; bottom: 14px; left: 50%; transform: translateX(-50%); max-width: calc(100% - 28px); padding: 6px 10px;
+  display: flex; flex-direction: column; align-items: center; gap: 5px; z-index: 5; }
+.ab-line { display: flex; align-items: center; justify-content: center; gap: 6px; flex-wrap: wrap; }
+.ab-top { gap: 10px; }
+.ab-round { font-size: 12px; color: var(--muted); }
 #actionBar.hidden { display: none; }
 .ab-big { font: 700 18px Georgia, serif; color: var(--gold); padding: 0 6px; }
 .ab-turn { display: inline-flex; align-items: center; gap: 6px; font: 700 14px Georgia, serif; color: var(--pc); padding: 0 4px; }
@@ -377,7 +380,7 @@ h3 { margin: 12px 0 6px; font-size: 12px; text-transform: uppercase; letter-spac
 .ab-pips i { width: 12px; height: 12px; border-radius: 50%; background: var(--gold); box-shadow: 0 0 6px rgba(232,189,87,.6); }
 .ab-pips i.used { background: rgba(255,255,255,.15); box-shadow: none; }
 .ab-hint, .ab-wait { font-size: 13px; color: var(--muted); padding: 0 6px; display: inline-flex; align-items: center; }
-.ab-sel { font-size: 13px; font-weight: 600; color: #fff; padding: 0 4px; border-left: 1px solid var(--border); padding-left: 10px; }
+.ab-sel { font-size: 13px; font-weight: 600; color: #fff; padding: 0 6px 0 0; }
 .ab-btn { font-size: 13px; padding: 6px 12px; }
 .ab-btn.on { border-color: var(--gold); color: var(--gold); box-shadow: 0 0 10px rgba(232,189,87,.25) inset; }
 .ab-btn.skill { border-color: rgba(183,140,255,.5); }
@@ -399,7 +402,6 @@ h3 { margin: 12px 0 6px; font-size: 12px; text-transform: uppercase; letter-spac
 @media (max-width: 760px) {
   #actionBar { bottom: 128px; max-width: calc(100% - 16px); gap: 4px; padding: 5px 6px; } /* above the folded side panel */
   .ab-btn { padding: 6px 9px; font-size: 12px; }
-  .ab-sel { display: none; }
 }
 
 /* first-pick d20 roll */

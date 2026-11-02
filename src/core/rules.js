@@ -58,8 +58,8 @@ export function movePoints(unit, state) {
 
 // Every hex the unit can end its move on: { key: { cost, hazard, prev } }.
 // Rules: can pass allies but not enemies; entering a hex next to an enemy ends the move
-// (engagement); flyers ignore terrain, height, engagement and can pass over anyone.
-// Phase Shift units ignore engagement and pass through enemies, but still pay for terrain.
+// flyers ignore terrain and height and can pass over anyone.
+// Phase Shift units pass through enemies, but still pay for terrain.
 export function reachable(state, unit, budget = movePoints(unit, state)) {
   const fly = has(unit, 'flight');
   const phase = fly || has(unit, 'phaseShift');
@@ -74,7 +74,6 @@ export function reachable(state, unit, budget = movePoints(unit, state)) {
     }
     const cur = open.splice(bi, 1)[0];
     const node = best[cur];
-    if (cur !== start && !phase && adjacentEnemies(state, cur, unit.owner, unit.id).length) continue;
     const from = cell(state, cur);
     for (const n of neighborKeys(cur)) {
       const to = cell(state, n);
@@ -110,21 +109,20 @@ export function pathTo(reach, start, dest) {
 }
 
 // Why a hex can or can't be moved to, for the hover breakdown:
-// { ok, cost, budget, steps: [{ key, terrain, base, climb, lava }], engaged, reason }
+// { ok, cost, budget, steps: [{ key, terrain, base, climb, lava }], reason }
 export function movePlan(state, unit, toKey) {
   const budget = movePoints(unit, state), start = unitKey(unit);
   const occupant = unitAt(state, toKey, unit.id);
   if (occupant) return { ok: false, budget, steps: [], reason: occupant.owner === unit.owner ? 'An ally is standing there.' : 'An enemy is standing there.' };
   const all = reachable(state, unit, Infinity);
-  if (!all[toKey]) return { ok: false, budget, steps: [], reason: 'No way through: enemies, a cliff or engagement block every path.' };
+  if (!all[toKey]) return { ok: false, budget, steps: [], reason: 'No way through: enemies or cliffs block every path.' };
   const path = pathTo(all, start, toKey), fly = has(unit, 'flight');
   const steps = path.slice(1).map((k, i) => {
     const from = cell(state, path[i]), to = cell(state, k);
     return { key: k, terrain: to.terrain, base: fly ? 1 : moveCostInto(unit, to), climb: fly ? 0 : Math.max(0, to.elev - from.elev), lava: !fly && hurtsOnEntry(unit, to) };
   });
   const cost = all[toKey].cost;
-  const engaged = !fly && !has(unit, 'phaseShift') && adjacentEnemies(state, toKey, unit.owner, unit.id).length > 0;
-  return { ok: cost <= budget, cost, budget, steps, engaged, reason: cost > budget ? `Needs ${cost} move, has ${budget}.` : null };
+  return { ok: cost <= budget, cost, budget, steps, reason: cost > budget ? `Needs ${cost} move, has ${budget}.` : null };
 }
 
 // Ranged line of sight. Blocked by a hex in between that is 2+ levels above both ends,
