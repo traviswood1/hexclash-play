@@ -7,7 +7,7 @@ import { MAP_SIZES, BIOMES, SYMMETRY, CORNERS, CORNER_NAMES } from '../core/mapg
 import { COMBAT } from '../core/rules.js';
 import { SWORD, SHIELD } from './icons.js';
 import { THEMES } from '../render/environment.js';
-import { FILTERS } from './draftScreen.js';
+import { FILTERS, sortPool, sortControlsHtml } from './draftScreen.js';
 import { playerUnits, liveUnitsOf, actionsLeft, canActivate, unitOptions, slotOf, allowedCorners } from '../core/game.js';
 
 // Highlight colours on the board, shared with main.js so the legend always matches.
@@ -66,6 +66,23 @@ export class UI {
     this.poolOpen = false;
     this.poolFilter = 'all';
     this.poolSearch = '';
+    this.poolSortKey = 'cost';
+    this.poolSortDir = 'desc';
+    const redrawPool = () => {
+      const box = document.querySelector('.pt-sort');
+      if (box) box.innerHTML = sortControlsHtml(this.poolSortKey, this.poolSortDir);
+      if (this.poolGame) $('ptGrid').innerHTML = this.poolGridHtml(this.poolGame);
+    };
+    $('hud').addEventListener('change', e => {
+      if (e.target.dataset.sort === undefined || !e.target.closest('#side')) return;
+      this.poolSortKey = e.target.value;
+      redrawPool();
+    });
+    $('hud').addEventListener('click', e => {
+      if (!e.target.closest('#side [data-sort-dir]')) return;
+      this.poolSortDir = this.poolSortDir === 'asc' ? 'desc' : 'asc';
+      redrawPool();
+    });
     // pool tray: filters, search and hover cards (the grid is redrawn in place so the search box keeps focus)
     $('hud').addEventListener('input', e => {
       if (e.target.dataset.poolSearch === undefined) return;
@@ -258,6 +275,7 @@ export class UI {
     this.poolGame = game;
     return `<h2>Unit pool</h2>
       <div class="pt-filters">${Object.entries(FILTERS).map(([k, f]) => `<button data-pool-filter="${k}" class="${k === this.poolFilter ? 'on' : ''}">${f.name}</button>`).join('')}
+        <span class="pt-sort">${sortControlsHtml(this.poolSortKey, this.poolSortDir)}</span>
         <input data-pool-search placeholder="Search name or role" value="${esc(this.poolSearch)}"></div>
       <div class="pt-grid" id="ptGrid">${this.poolGridHtml(game)}</div>`;
   }
@@ -267,7 +285,8 @@ export class UI {
     const items = game.pool.filter(it => {
       const d = UNITS[it.key];
       return f.test(d) && (!q || d.name.toLowerCase().includes(q) || d.role.toLowerCase().includes(q));
-    }).sort((a, b) => UNITS[b.key].cost - UNITS[a.key].cost || UNITS[a.key].name.localeCompare(UNITS[b.key].name));
+    });
+    sortPool(items, this.poolSortKey, this.poolSortDir);
     return items.map(it => {
       const d = UNITS[it.key], url = this.portraits?.[it.key];
       const img = url ? `<img src="${url}" alt="" loading="lazy">` : `<span class="ph" style="background:${d.color}">${esc(d.name[0])}</span>`;
@@ -403,7 +422,7 @@ export class UI {
       ${statuses ? `<div class="statuses" style="margin-top:6px">${statuses}</div>` : ''}
       <div class="ability attackrow ${opts ? (opts.canAct ? (opts.attackTargets.length ? 'ready' : '') : 'spent') : ''}">
         <div class="an"><span>Attack <span class="tag">action</span></span>${opts ? `<span class="tag">${!opts.canAct ? 'used' : opts.attackTargets.length ? `${opts.attackTargets.length} in range` : 'none in range'}</span>` : ''}</div>
-        <div class="ad">${d.atk} attack dice, ${d.range === 1 ? 'against an adjacent enemy' : `range ${d.range}${d.abilities.includes('sharpshooter') ? ' (+ height)' : ''}, needs line of sight`}.</div></div>
+        <div class="adesc">${d.atk} attack dice, ${d.range === 1 ? 'against an adjacent enemy' : `range ${d.range}${d.abilities.includes('sharpshooter') ? ' (+ height)' : ''}, needs line of sight`}.</div></div>
       ${d.abilities.map(k => {
         const ab = ABILITIES[k];
         const o = opts?.abilities.find(a => a.key === k);
@@ -415,7 +434,7 @@ export class UI {
         } else if (cd) btn = `<span class="tag">recharging ${cd}</span>`;
         return `<div class="ability ${ab.kind} ${what.abilityKey === k ? 'targeting' : ''}">
           <div class="an"><span>${esc(ab.name)} <span class="tag">${ab.kind === 'active' ? (ab.usesMove ? 'replaces move' : `action · cd ${ab.cooldown}`) : 'passive'}</span></span>${btn}</div>
-          <div class="ad">${esc(ab.desc)}</div></div>`;
+          <div class="adesc">${esc(ab.desc)}</div></div>`;
       }).join('')}${what.footer ? `<div class="tip-foot">${what.footer}</div>` : ''}`;
   }
 
@@ -486,7 +505,7 @@ export class UI {
   }
 
   banner(text, color = '#fff') {
-    const el = $('banner');
+    const el = $('callout');
     el.textContent = text;
     el.style.color = color;
     el.classList.add('show');

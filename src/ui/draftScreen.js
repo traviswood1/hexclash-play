@@ -12,6 +12,17 @@ import { playerUnits, pointsLeft } from '../core/game.js';
 const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
+// Sort choices for the pool (also used by the setup screen's pool tray). Ties go by name.
+export const SORTS = { cost: 'Cost', hp: 'HP', move: 'Move', atk: 'Attack', def: 'Defense', range: 'Range', name: 'Name' };
+export function sortPool(items, key = 'cost', dir = 'desc') {
+  const val = it => (key === 'name' ? 0 : UNITS[it.key][key]);
+  const sign = dir === 'asc' ? 1 : -1;
+  return items.sort((a, b) => sign * (val(a) - val(b)) || (key === 'name' ? sign : 1) * UNITS[a.key].name.localeCompare(UNITS[b.key].name));
+}
+export const sortControlsHtml = (key, dir) => `<select data-sort title="Sort by">${Object.entries(SORTS)
+  .map(([k, n]) => `<option value="${k}" ${k === key ? 'selected' : ''}>${n}</option>`).join('')}</select>
+  <button data-sort-dir title="${dir === 'asc' ? 'Lowest first' : 'Highest first'}">${dir === 'asc' ? '↑' : '↓'}</button>`;
+
 // Filter tabs over the pool (also used by the setup screen's pool tray)
 export const FILTERS = {
   all: { name: 'All', test: () => true },
@@ -26,6 +37,8 @@ export class DraftScreen {
     this.h = handlers;
     this.filter = 'all';
     this.search = '';
+    this.sortKey = 'cost';
+    this.sortDir = 'desc';
     this.portraits = {};
     this.selected = null;
     this.hover = null;
@@ -47,6 +60,7 @@ export class DraftScreen {
         this.renderGrid();
         return;
       }
+      if (e.target.closest('[data-sort-dir]')) { this.sortDir = this.sortDir === 'asc' ? 'desc' : 'asc'; this.renderSort(); return; }
       if (e.target.closest('[data-lock]')) this.h.lockIn(this.selected);
       if (e.target.closest('[data-map]')) this.h.viewMap(true);
     });
@@ -58,6 +72,11 @@ export class DraftScreen {
       const tile = e.target.closest('[data-pid]');
       const pid = tile ? +tile.dataset.pid : null;
       if (pid !== this.hover) { this.hover = pid; if (this.game) this.renderDetail(); }
+    });
+    this.el.addEventListener('change', e => {
+      if (e.target.dataset.sort === undefined) return;
+      this.sortKey = e.target.value;
+      this.renderSort();
     });
     this.el.addEventListener('input', e => {
       if (e.target.dataset.search === undefined) return;
@@ -92,6 +111,7 @@ export class DraftScreen {
         <div class="ds-center">
           <div class="ds-filters">${Object.entries(FILTERS).map(([k, f]) =>
             `<button data-filter="${k}" class="${k === this.filter ? 'on' : ''}">${f.name}</button>`).join('')}
+            <span class="ds-sort">${sortControlsHtml(this.sortKey, this.sortDir)}</span>
             <input data-search placeholder="Search" value="${esc(this.search)}"></div>
           <div class="ds-grid" id="dsGrid"></div>
           <div class="ds-detail" id="dsDetail"></div>
@@ -132,6 +152,13 @@ export class DraftScreen {
     return url ? `<img src="${url}" alt="">` : `<span class="ph" style="background:${UNITS[key].color}">${esc(UNITS[key].name[0])}</span>`;
   }
 
+  // sort controls changed: redraw them and the grid
+  renderSort() {
+    const box = this.el.querySelector('.ds-sort');
+    if (box) box.innerHTML = sortControlsHtml(this.sortKey, this.sortDir);
+    this.renderGrid();
+  }
+
   renderGrid() {
     const game = this.game, s = this.s;
     const grid = this.el.querySelector('#dsGrid');
@@ -141,7 +168,8 @@ export class DraftScreen {
     const items = game.pool.filter(it => {
       const d = UNITS[it.key];
       return f.test(d) && (!this.search || d.name.toLowerCase().includes(this.search) || d.role.toLowerCase().includes(this.search));
-    }).sort((a, b) => UNITS[b.key].cost - UNITS[a.key].cost || UNITS[a.key].name.localeCompare(UNITS[b.key].name));
+    });
+    sortPool(items, this.sortKey, this.sortDir);
     grid.innerHTML = items.map(it => {
       const d = UNITS[it.key];
       const taken = it.takenBy !== null;

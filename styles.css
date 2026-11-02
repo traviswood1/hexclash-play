@@ -17,7 +17,7 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #07090f; col
 #stage canvas { display: block; touch-action: none; }
 #hud { position: fixed; inset: 0; pointer-events: none; }
 #hud > * { pointer-events: auto; }
-#floaters, #banner, #hexInfo, #toast, #plates, #vignette { pointer-events: none !important; }
+#floaters, #callout, #hexInfo, #toast, #plates, #vignette { pointer-events: none !important; }
 #vignette { position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 45%, transparent 55%, rgba(0, 0, 0, 0.55) 100%); }
 
 /* draft gallery nameplates, pinned under each piece */
@@ -132,7 +132,7 @@ h3 { margin: 12px 0 6px; font-size: 12px; text-transform: uppercase; letter-spac
 .uc-stats small { font-size: 10px; color: var(--muted); text-transform: uppercase; }
 .ability { border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; margin-top: 6px; background: var(--panel-2); }
 .ability .an { display: flex; justify-content: space-between; align-items: center; gap: 6px; font-weight: 700; font-size: 13px; }
-.ability .ad { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.ability .adesc { font-size: 12px; color: var(--muted); margin-top: 2px; }
 .ability.active { border-color: rgba(183,140,255,.35); }
 .ability.targeting { border-color: var(--magic); background: rgba(183,140,255,.14); }
 .ability button { padding: 3px 10px; font-size: 12px; }
@@ -162,9 +162,9 @@ h3 { margin: 12px 0 6px; font-size: 12px; text-transform: uppercase; letter-spac
 #hexInfo { position: absolute; bottom: 70px; left: 50%; transform: translateX(-50%); background: var(--panel); border: 1px solid var(--border);
   border-radius: 99px; padding: 5px 14px; font-size: 12px; white-space: nowrap; }
 #hexInfo:empty { display: none; }
-#banner { position: absolute; top: 34%; left: 0; right: 0; text-align: center; font: 700 42px Georgia, serif; letter-spacing: .04em;
+#callout { position: absolute; top: 34%; left: 0; right: 0; text-align: center; font: 700 42px Georgia, serif; letter-spacing: .04em;
   text-shadow: 0 4px 24px rgba(0,0,0,.8); opacity: 0; transition: opacity .35s; }
-#banner.show { opacity: 1; }
+#callout.show { opacity: 1; }
 #toast { position: absolute; top: 60px; left: 50%; transform: translateX(-50%); background: rgba(120,25,35,.92); border-radius: 8px;
   padding: 8px 14px; opacity: 0; transition: opacity .25s; }
 #toast.show { opacity: 1; }
@@ -357,6 +357,9 @@ h3 { margin: 12px 0 6px; font-size: 12px; text-transform: uppercase; letter-spac
 .pt-filters button { padding: 5px 10px; font-size: 12px; }
 .pt-filters button.on { border-color: var(--gold); color: var(--gold); }
 .pt-filters input { flex: 1; min-width: 120px; }
+.pt-sort, .ds-sort { display: inline-flex; gap: 4px; align-items: center; }
+.pt-sort select, .ds-sort select { padding: 4px 6px; font-size: 12px; width: auto; }
+.pt-sort button, .ds-sort button { padding: 4px 9px; font-size: 13px; min-width: 30px; }
 .pt-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; }
 .pt-grid .ds-tile { cursor: default; }
 #poolTab.hidden { display: none; }
